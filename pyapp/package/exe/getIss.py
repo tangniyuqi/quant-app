@@ -57,7 +57,7 @@ DisableProgramGroupPage=yes
 ; 移除以下行，以在管理安装模式下运行（为所有用户安装）。
 PrivilegesRequired=lowest
 OutputDir=''' + buildDir + '''
-OutputBaseFilename=''' + appName + '''-V''' + appVersion + '''_Windows
+OutputBaseFilename=''' + appName + '''-v''' + appVersion + '''_Windows
 SetupIconFile=''' + logoPath + '''
 Compression=lzma
 SolidCompression=yes

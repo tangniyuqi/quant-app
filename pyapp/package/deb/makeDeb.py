@@ -99,4 +99,4 @@ os.system(f'cd {buildDir} && dpkg-deb --build {appName}')
 
 os.system(f'rm -fr {buildDir}/{appName} && mv {buildDir}/bin/{appName} {buildDir}/{appName} && rm -fr {buildDir}/bin')
 
-os.system(f'mv {buildDir}/{appName}.deb {buildDir}/{appName}-V{appVersion}_Linux.deb')
+os.system(f'mv {buildDir}/{appName}.deb {buildDir}/{appName}-v{appVersion}_Linux.deb')
