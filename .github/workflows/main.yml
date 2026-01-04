@@ -7,7 +7,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # 仍然保持三平台构建
         os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - name: 拉取项目代码
@@ -48,8 +47,31 @@ jobs:
       - name: 初始化打包环境
         run: pnpm run init
 
+      - name: 配置 macOS 证书 (仅限macOS)
+        if: matrix.os == 'macos-latest'
+        env:
+          # 必须使用 ${{ secrets.xxx }} 语法
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          # 将 Base64 证书还原
+          echo $CSC_LINK | base64 --decode > certificate.p12
+
+          # 创建临时钥匙串供签名工具使用
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 14)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 导入证书
+          security import certificate.p12 -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 确认证书是否成功安装 (可选，调试用)
+          security find-identity -v -p codesigning
+
       - name: 开始打包
-        # 针对 macOS 使用 --universal 参数，其他平台保持原样
         run: |
           if [ "${{ runner.os }}" == "macOS" ]; then
             pnpm run build --mac --universal
@@ -58,10 +80,9 @@ jobs:
           fi
         shell: bash
         env:
-          CSC_LINK: CSC_LINK
-          CSC_KEY_PASSWORD: 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
-
-          # 如果你要做公证，还需要下面这些
+          # 这里必须正确映射 Secrets，PPX/打包工具才能读取
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -69,13 +90,12 @@ jobs:
       - name: 上传打包完成的程序包
         uses: actions/upload-artifact@v4
         with:
-          # 修改 artifact 名称以区分通用包
-          name: Setup_${{ runner.os == 'macOS' && 'macOS_Universal' || runner.os }}
+          name: Setup_${{ runner.os }}
           retention-days: 1
-          # 确保匹配通用包生成的文件路径
-
           path: |
             build/*.dmg
             build/*.exe
             build/*.deb
             build/*.zip
+            dist/*.dmg
+            dist/*.zip
