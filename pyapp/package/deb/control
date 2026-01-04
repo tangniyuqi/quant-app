@@ -1,8 +1,8 @@
-Package: PPX
+Package: quant-app
 Version: 1.0.0
 Section: base
 Priority: optional
 Architecture: all
 Depends: python3
-Maintainer: PanGao
-Description: https://blog.pangao.vip
+Maintainer: Tang Ming
+Description: https://go.noooya.com

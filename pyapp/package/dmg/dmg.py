@@ -1,8 +1,8 @@
 
-filename = '智子量化-V1.0.1_macOS'
-volume_name = '智子量化-V1.0.1_macOS.dmg'
+filename = '智子量化-V1.0.0_macOS'
+volume_name = '智子量化-V1.0.0_macOS.dmg'
 format = 'UDBZ'
-files = ['/Users/a1/data/python/PPX/pyapp/../build/智子量化.app', '/Users/a1/data/python/PPX/pyapp/package/dmg/智子量化.webloc']
+files = ['/Users/a1/data/python/quant-app/pyapp/../build/智子量化.app', '/Users/a1/data/python/PPX/pyapp/package/dmg/智子量化.webloc']
 symlinks = {'Applications': '/Applications'}
 icon_locations = {
     '智子量化.app': (160, 120),
@@ -12,5 +12,5 @@ icon_locations = {
 window_rect = ((200, 200), (590, 416))
 icon_size = 60
 text_size = 12
-badge_icon = '/Users/a1/data/python/PPX/pyapp/icon/logo.icns'
-background = '/Users/a1/data/python/PPX/pyapp/package/dmg/bg.png'
+badge_icon = '/Users/a1/data/python/quant-app/pyapp/icon/logo.icns'
+background = '/Users/a1/data/python/quant-app/pyapp/package/dmg/bg.png'

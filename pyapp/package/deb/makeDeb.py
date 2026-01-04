@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-Author: 潘高
-LastEditors: 潘高
-Date: 2024-09-09 21:06:15
-LastEditTime: 2024-09-09 23:37:41
+Author: Tang Ming
+Date: 2025-12-12 21:06:15
+LastEditTime: 2026-01-01 23:37:41
 Description: 制作linux下的deb安装包
 usage: 运行前，请确保本机已经搭建Python3开发环境，且已经安装  模块。
 '''
