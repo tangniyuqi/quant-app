@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-Author: 潘高
-LastEditors: 潘高
-Date: 2023-04-03 17:42:32
-LastEditTime: 2024-02-24 09:36:56
+Author: Tang Ming
+Date: 2025-12-12 17:42:32
+LastEditTime: 2026-01-04 09:36:56
 Description: 生成 .iss exe安装包配置文件，需要用到 InnoSetup 软件。
 '''
 

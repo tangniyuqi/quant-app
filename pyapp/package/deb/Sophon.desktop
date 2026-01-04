@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=quant-app
-Comment=Description of MyApp
+Name=Sophon
+Comment=Description of Sophon
 Exec=/usr/local/bin/quant-app  # 可执行文件的路径
 Icon=/usr/share/icons/myapp.png  # 图标文件的路径
 Terminal=false

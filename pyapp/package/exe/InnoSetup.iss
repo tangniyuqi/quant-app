@@ -1,11 +1,11 @@
 ; 脚本由 Inno Setup 脚本向导 生成！
 ; 已针对 GitHub Actions 自动化打包进行路径优化
 
-#define MyAppName "智子量化"
+#define MyAppName "Sophon"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Tang Ming"
 #define MyAppURL "https://go.boooya.com"
-#define MyAppExeName "智子量化.exe"
+#define MyAppExeName "Sophon.exe"
 #define MyAppAssocName MyAppName + " 文件"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -28,7 +28,7 @@ PrivilegesRequired=lowest
 ; --- 路径修复开始 ---
 ; 输出安装包的文件夹（相对于 .iss 文件）
 OutputDir=..\..\..\build_output
-OutputBaseFilename=quant-app-V1.0.0_Windows
+OutputBaseFilename=Sophon-V1.0.0_Windows
 ; 图标相对路径：假设在 pyapp/icon/logo.ico
 SetupIconFile=..\..\icon\logo.ico
 ; --- 路径修复结束 ---
