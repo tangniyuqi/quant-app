@@ -3,30 +3,30 @@
 import sys
 import os
 
-# 基础路径配置
+# 获取配置信息
 pyappDir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(pyappDir)
 from config.config import Config
 
-# 获取配置项
 appName = Config.appName
 appVersion = Config.appVersion[1:] if Config.appVersion.startswith('V') else Config.appVersion
 appDeveloper = Config.appDeveloper
 appBlogs = Config.appBlogs
-# 确保 GUID 内部不包含大括号
+# 确保 GUID 内部不包含大括号，方便后续统一转义
 appISSID = Config.appISSID.strip('{}') 
 
-# 使用相对路径，解决 GitHub Actions 路径不一致问题
+# 相对路径适配 (适配 GitHub Actions 环境)
 relBuildDir = "..\\..\\..\\build"
 relLogoPath = "..\\..\\icon\\logo.ico"
 relOutputDir = "..\\..\\..\\build_output"
 
 def getIss():
-    # 注意：f-string 中，{{ 代表字符 {， }} 代表字符 }
+    # 注意：在 Python f-string 中：
+    # {{ 渲染为 {
+    # {{{{ 渲染为 {{ (Inno Setup 用于表示纯文本 { 的转义符)
     return f'''
-; This file is auto-generated for GitHub Actions
 [Setup]
-; 修复点：GUID 必须使用双左大括号转义
+; 修复 Inno Setup GUID 识别问题
 AppId={{{{{{appISSID}}}
 AppName={appName}
 AppVersion={appVersion}
@@ -46,17 +46,17 @@ WizardStyle=modern
 Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"; Flags: unchecked
+Name: "desktopicon"; Description: "{{{{cm:CreateDesktopIcon}}"; GroupDescription: "{{{{cm:AdditionalIcons}}"; Flags: unchecked
 
 [Files]
-Source: "{relBuildDir}\\*"; DestDir: "{{app}}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{relBuildDir}\\*"; DestDir: "{{{{app}}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{{autoprograms}}\\{appName}"; Filename: "{{app}}\\{appName}.exe"
-Name: "{{autodesktop}}\\{appName}"; Filename: "{{app}}\\{appName}.exe"; Tasks: desktopicon
+Name: "{{{{autoprograms}}\\{appName}"; Filename: "{{{{app}}\\{appName}.exe"
+Name: "{{{{autodesktop}}\\{appName}"; Filename: "{{{{app}}\\{appName}.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{{app}}\\{appName}.exe"; Description: "{{cm:LaunchProgram,{appName}}}"; Flags: nowait postinstall skipifsilent
+Filename: "{{{{app}}\\{appName}.exe"; Description: "{{{{cm:LaunchProgram,{appName}}}"; Flags: nowait postinstall skipifsilent
 '''
 
 # 写入文件，使用 utf-8-sig 编码以兼容 Inno Setup 中文显示
@@ -65,4 +65,5 @@ issPath = os.path.join(issDir, 'InnoSetup.iss')
 with open(issPath, 'w+', encoding='utf-8-sig') as f:
     f.write(getIss())
 
+# 使用纯英文打印，彻底解决控制台 UnicodeEncodeError
 print(f"Success: ISS config generated at {issPath}")
