@@ -2,12 +2,15 @@ name: build
 on:
   push:
     branches: [main]
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # 保持三平台构建
         os: [windows-latest, macos-latest, ubuntu-latest]
+
     steps:
       - name: 拉取项目代码
         uses: actions/checkout@v4
@@ -47,45 +50,47 @@ jobs:
       - name: 初始化打包环境
         run: pnpm run init
 
-      - name: 配置 macOS 证书 (仅限macOS)
+      - name: 配置 macOS 证书 (仅限免费证书签名)
         if: matrix.os == 'macos-latest'
         env:
-          # 必须使用 ${{ secrets.xxx }} 语法
+          # 从 GitHub Secrets 映射变量
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          # 将 Base64 证书还原
-          echo $CSC_LINK | base64 --decode > certificate.p12
+          # 1. 严格检查变量是否存在，防止空值导致 MAC verification failed
+          if [ -z "$CSC_LINK" ]; then echo "错误: Secret CSC_LINK 为空"; exit 1; fi
+          if [ -z "$CSC_KEY_PASSWORD" ]; then echo "错误: Secret CSC_KEY_PASSWORD 为空"; exit 1; fi
 
-          # 创建临时钥匙串供签名工具使用
+          # 2. 解码证书文件
+          echo "$CSC_LINK" | base64 --decode > certificate.p12
+
+          # 3. 创建临时钥匙串
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 14)
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # 导入证书
+          # 4. 导入证书到钥匙串
           security import certificate.p12 -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # 确认证书是否成功安装 (可选，调试用)
-          security find-identity -v -p codesigning
+          echo "证书配置成功！"
 
       - name: 开始打包
         run: |
           if [ "${{ runner.os }}" == "macOS" ]; then
-            pnpm run build --mac --universal
+            # 免费证书建议不要打 --universal 容易失败，先尝试打当前架构包
+            # 如果你的打包工具是 PPX，它会识别钥匙串中的 Apple Development 证书
+            pnpm run build --mac --arm64
           else
             pnpm run build
           fi
         shell: bash
         env:
-          # 这里必须正确映射 Secrets，PPX/打包工具才能读取
+          # 提供给打包工具的环境变量
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: 上传打包完成的程序包
         uses: actions/upload-artifact@v4
