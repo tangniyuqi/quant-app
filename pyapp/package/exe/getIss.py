@@ -1,44 +1,64 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+'''
+Author: Tang Ming
+Date: 2025-12-12 17:42:32
+LastEditTime: 2026-01-04 09:36:56
+Description: 生成 .iss exe安装包配置文件，需要用到 InnoSetup 软件。
+'''
+
 import sys
 import os
-
-# 基础路径配置
 pyappDir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(pyappDir)
 from config.config import Config
 
-# 获取配置项
-appName = Config.appName
-appVersion = Config.appVersion[1:] if Config.appVersion.startswith('V') else Config.appVersion
-appDeveloper = Config.appDeveloper
-appBlogs = Config.appBlogs
-# 核心修复：确保 GUID 内部不包含大括号
-appISSID = Config.appISSID.strip('{}') 
+appName = Config.appName    # 应用名称
+appVersion = Config.appVersion  # 应用版本号
+appVersion = appVersion[1:]    # 去掉第一位V
+appDeveloper = Config.appDeveloper  # 应用开发者
+appBlogs = Config.appBlogs  # 个人博客
+rootDir = os.path.dirname(pyappDir)
+buildDir = os.path.join(rootDir, 'build')
+logoPath = os.path.join(rootDir, 'pyapp', 'icon', 'logo.ico')
+appISSID = Config.appISSID    # 安装包唯一GUID
 
-# 使用相对路径，解决 GitHub Actions 环境下的盘符不一致问题
-relBuildDir = "..\\..\\..\\build"
-relLogoPath = "..\\..\\icon\\logo.ico"
-relOutputDir = "..\\..\\..\\build_output"
 
+# 获取配置文件内容
 def getIss():
-    # 注意：在 Python f-string 中，{{ 渲染为 {， }} 渲染为 }
-    # 而 Inno Setup 需要两个 {{ 来表示一个纯文本的 {
-    # 因此这里使用了复杂的嵌套转义
-    return f'''
+    return '''
+; 脚本由 Inno Setup 脚本向导 生成！
+; 有关创建 Inno Setup 脚本文件的详细资料请查阅帮助文档！
+
+#define MyAppName "''' + appName + '''"
+#define MyAppVersion "''' + appVersion + '''"
+#define MyAppPublisher "''' + appDeveloper + '''"
+#define MyAppURL "''' + appBlogs + '''"
+#define MyAppExeName "''' + appName + '''.exe"
+#define MyAppAssocName MyAppName + " 文件"
+#define MyAppAssocExt ".myp"
+#define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
+
 [Setup]
-; 核心修复：GUID 必须使用双左大括号转义以供 Inno Setup 识别
-AppId={{{{{appISSID}}}
-AppName={appName}
-AppVersion={appVersion}
-AppPublisher={appDeveloper}
-AppPublisherURL={appBlogs}
-DefaultDirName={{autopf}}\\{appName}
+; 注: AppId的值为单独标识该应用程序。
+; 不要为其他安装程序使用相同的AppId值。
+; (若要生成新的 GUID，可在菜单中点击 "工具|生成 GUID"。)
+AppId={{''' + appISSID + '''}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+;AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+DefaultDirName={autopf}\{#MyAppName}
+ChangesAssociations=yes
 DisableProgramGroupPage=yes
+; 移除以下行，以在管理安装模式下运行（为所有用户安装）。
 PrivilegesRequired=lowest
-OutputDir={relOutputDir}
-OutputBaseFilename={appName}-V{appVersion}_Windows
-SetupIconFile={relLogoPath}
+OutputDir=''' + buildDir + '''
+OutputBaseFilename=''' + appName + '''-V''' + appVersion + '''_Windows
+SetupIconFile=''' + logoPath + '''
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -47,25 +67,30 @@ WizardStyle=modern
 Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{{{{cm:CreateDesktopIcon}}"; GroupDescription: "{{{{cm:AdditionalIcons}}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; 核心修复：指向相对路径并包含所有子文件
-Source: "{relBuildDir}\\*"; DestDir: "{{{{app}}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "''' + buildDir + '''\{#MyAppName}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; 注意: 不要在任何共享系统文件上使用“Flags: ignoreversion”
+
+[Registry]
+Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocName}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".myp"; ValueData: ""
 
 [Icons]
-Name: "{{{{autoprograms}}\\{appName}"; Filename: "{{{{app}}\\{appName}.exe"
-Name: "{{{{autodesktop}}\\{appName}"; Filename: "{{{{app}}\\{appName}.exe"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{{{{app}}\\{appName}.exe"; Description: "{{{{cm:LaunchProgram,{appName}}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
 '''
 
-# 核心修复：使用 utf-8-sig 编码写入文件，确保 Inno Setup 能正确显示中文
-issDir = os.path.dirname(__file__)
-issPath = os.path.join(issDir, 'InnoSetup.iss')
-with open(issPath, 'w+', encoding='utf-8-sig') as f:
-    f.write(getIss())
 
-# 核心修复：控制台仅打印英文，防止 GitHub Actions 环境下的编码报错
-print(f"Success: Inno Setup config generated at {issPath}")
+# 生成配置文件
+issDir = os.path.dirname(__file__)
+with open(os.path.join(issDir, 'InnoSetup.iss'), 'w+', encoding='gbk') as f:
+    f.write(getIss())
