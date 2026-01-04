@@ -1,36 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-'''
-Author: Tang Ming
-Date: 2025-12-12 17:42:32
-LastEditTime: 2026-01-04 15:00:00
-Description: 生成 .iss 配置文件，使用相对路径适配 GitHub Actions
-'''
-
 import sys
 import os
 
-# 保持原有配置获取逻辑
+# 基础路径配置
 pyappDir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(pyappDir)
 from config.config import Config
 
+# 获取配置项
 appName = Config.appName
 appVersion = Config.appVersion[1:] if Config.appVersion.startswith('V') else Config.appVersion
 appDeveloper = Config.appDeveloper
 appBlogs = Config.appBlogs
 appISSID = Config.appISSID
 
-# --- 关键修改：使用相对于 .iss 文件的相对路径 ---
-# 假设 .iss 文件生成在 pyapp/package/exe/ 目录下
-# build 目录通常在项目根目录，即 ../../../build
+# 使用相对路径，解决 GitHub Actions 的路径匹配问题 
 relBuildDir = "..\\..\\..\\build"
 relLogoPath = "..\\..\\icon\\logo.ico"
 relOutputDir = "..\\..\\..\\build_output"
 
 def getIss():
     return f'''
-; 脚本由 Python 动态生成，适配 GitHub Actions
+; This file is auto-generated for GitHub Actions
 #define MyAppName "{appName}"
 #define MyAppVersion "{appVersion}"
 #define MyAppPublisher "{appDeveloper}"
@@ -46,7 +38,6 @@ AppPublisherURL={{#MyAppURL}}
 DefaultDirName={{autopf}}\\{{#MyAppName}}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-; 修改输出目录为相对路径
 OutputDir={relOutputDir}
 OutputBaseFilename={appName}-V{appVersion}_Windows
 SetupIconFile={relLogoPath}
@@ -61,8 +52,7 @@ Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"; Flags: unchecked
 
 [Files]
-; 核心修复：指向构建出的 exe 或文件夹
-; 如果是打包整个目录：
+; 打包 build 目录下的所有文件 [cite: 2]
 Source: "{relBuildDir}\\*"; DestDir: "{{app}}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
@@ -73,10 +63,11 @@ Name: "{{autodesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}";
 Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#StringChange(MyAppName, '&', '&&')}}}}"; Flags: nowait postinstall skipifsilent
 '''
 
-# 生成配置文件，使用 utf-8-sig 以兼容 Inno Setup 中文
+# 关键修复点 1：使用 utf-8-sig 编码写入，解决 InnoSetup 的中文识别问题 
 issDir = os.path.dirname(__file__)
 issPath = os.path.join(issDir, 'InnoSetup.iss')
 with open(issPath, 'w+', encoding='utf-8-sig') as f:
     f.write(getIss())
 
-print(f"成功生成 ISS 配置文件: {issPath}")
+# 关键修复点 2：将 print 语句改为英文，避免 UnicodeEncodeError 
+print(f"Successfully generated ISS config: {issPath}")
