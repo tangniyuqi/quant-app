@@ -71,7 +71,7 @@ icon_locations = {
     'Applications': (430, 120),
     '智子量化.webloc': (450, 243)
 }
-window_rect = ((200, 200), (590, 416))
+window_rect = ((200, 200), (600, 350))
 icon_size = 60
 text_size = 12
 badge_icon = '""" + pyappDir + """/icon/logo.icns'
