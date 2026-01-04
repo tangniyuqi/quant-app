@@ -82,7 +82,7 @@ jobs:
           if [ "${{ runner.os }}" == "macOS" ]; then
             # 免费证书建议不要打 --universal 容易失败，先尝试打当前架构包
             # 如果你的打包工具是 PPX，它会识别钥匙串中的 Apple Development 证书
-            pnpm run build --mac --arm64
+            pnpm run build --mac --x64
           else
             pnpm run build
           fi
