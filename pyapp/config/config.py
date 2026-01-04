@@ -22,7 +22,7 @@ class Config:
     ##
     # 程序基础配置信息
     ##
-    appName = 'Sophon'  # 应用名称
+    appName = '智子量化'  # 应用名称
     appNameEN = 'Sophon'    # 应用名称-英文（用于生成缓存文件夹，必须是英文）
     appVersion = "v1.0.0"  # 应用版本号
     appDeveloper = "Tang Ming"  # 应用开发者
