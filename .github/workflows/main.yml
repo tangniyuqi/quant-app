@@ -77,18 +77,20 @@ jobs:
 
           echo "证书配置成功！"
 
-      - name: 开始打包
+      - name: 开始打包 (针对 Intel 芯片)
         run: |
           if [ "${{ runner.os }}" == "macOS" ]; then
-            # 免费证书建议不要打 --universal 容易失败，先尝试打当前架构包
-            # 如果你的打包工具是 PPX，它会识别钥匙串中的 Apple Development 证书
+            # 既然是 Intel 芯片，必须指定为 x64
             pnpm run build --mac --x64
+            
+            # 手动强制深度签名 (防止禁止图标)
+            # 这里的路径请根据你的实际生成位置确认，通常是 dist/ 或 build/
+            codesign --force --deep --sign "Apple Development" dist/智子量化.app
           else
             pnpm run build
           fi
         shell: bash
         env:
-          # 提供给打包工具的环境变量
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
