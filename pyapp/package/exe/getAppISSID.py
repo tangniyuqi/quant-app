@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-Author: 潘高
-LastEditors: 潘高
-Date: 2023-04-25 10:25:55
-LastEditTime: 2025-06-18 17:14:01
+Author: Tang Ming
+Date: 2026-01-04 10:25:55
+LastEditTime: 2026-01-04 17:14:01
 Description: 生成 appISSID 打包唯一编号。
 '''
 import random

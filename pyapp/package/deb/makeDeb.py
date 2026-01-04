@@ -3,7 +3,7 @@
 '''
 Author: Tang Ming
 Date: 2025-12-12 21:06:15
-LastEditTime: 2026-01-01 23:37:41
+LastEditTime: 2026-01-04 23:37:41
 Description: 制作linux下的deb安装包
 usage: 运行前，请确保本机已经搭建Python3开发环境，且已经安装  模块。
 '''
@@ -16,7 +16,7 @@ pyappDir = os.path.dirname(os.path.dirname(scriptDir))
 sys.path.append(pyappDir)
 from config.config import Config
 
-appName = Config.appName    # 应用名称
+appName = Config.appNameEN    # 应用名称 Config.appName 中文名打包失败改用Config.appNameEN
 appVersion = Config.appVersion  # 应用版本号
 appVersion = appVersion[1:]    # 去掉第一位V
 appDeveloper = Config.appDeveloper  # 应用开发者
