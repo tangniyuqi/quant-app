@@ -7,6 +7,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # 仍然保持三平台构建
         os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - name: 拉取项目代码
@@ -48,11 +49,24 @@ jobs:
         run: pnpm run init
 
       - name: 开始打包
-        run: pnpm run build
+        # 针对 macOS 使用 --universal 参数，其他平台保持原样
+        run: |
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            pnpm run build --mac --universal
+          else
+            pnpm run build
+          fi
+        shell: bash
 
       - name: 上传打包完成的程序包
         uses: actions/upload-artifact@v4
         with:
-          name: Setup_${{ runner.os }}
+          # 修改 artifact 名称以区分通用包
+          name: Setup_${{ runner.os == 'macOS' && 'macOS_Universal' || runner.os }}
           retention-days: 1
-          path: build/*-*_*.*
+          # 确保匹配通用包生成的文件路径
+          path: |
+            build/*.dmg
+            build/*.exe
+            build/*.deb
+            build/*.zip
