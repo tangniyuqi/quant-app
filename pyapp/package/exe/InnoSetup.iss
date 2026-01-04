@@ -1,17 +1,15 @@
-; 脚本由 Inno Setup 脚本向导 生成！
-; 已针对 GitHub Actions 自动化打包进行路径优化
-
+; 已经针对 GitHub Actions 路径和编码问题进行了优化
 #define MyAppName "Sophon"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Tang Ming"
 #define MyAppURL "https://go.boooya.com"
-#define MyAppExeName "Sophon.exe"
-#define MyAppAssocName MyAppName + " 文件"
+; 关键点：确保这里的名字和你在 build 流程（如 npm run build）中生成的 exe 文件名完全一致
+#define MyAppExeName "Sophon.exe" 
+#define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
-; 注: AppId的值为单独标识该应用程序。
 AppId={{AC18B034-AC83-EA47-AC87-3D3FC82BA9A1}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -22,16 +20,12 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 ChangesAssociations=yes
 DisableProgramGroupPage=yes
-; 移除以下行，以在管理安装模式下运行（为所有用户安装）。
 PrivilegesRequired=lowest
 
-; --- 路径修复开始 ---
-; 输出安装包的文件夹（相对于 .iss 文件）
+; 路径修复：使用相对路径指向根目录下的输出位置
 OutputDir=..\..\..\build_output
 OutputBaseFilename=Sophon-V1.0.0_Windows
-; 图标相对路径：假设在 pyapp/icon/logo.ico
 SetupIconFile=..\..\icon\logo.ico
-; --- 路径修复结束 ---
 
 Compression=lzma
 SolidCompression=yes
@@ -44,18 +38,11 @@ Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; --- 关键修复：指向 GitHub 工作流生成的 build 目录 ---
-; 使用相对路径向上跳 3 级（从 pyapp/package/exe/ 跳到根目录的 build）
+; 核心修复：指向 GitHub 工作流生成的 build 目录 
+; 建议加上 ignoreversion 避免版本冲突 
 Source: "..\..\..\build\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; 如果需要包含 build 目录下的所有支持文件，请取消下面这行的注释：
+; 如果 build 目录下还有其他依赖文件夹，建议取消下行注释以包含所有文件
 ; Source: "..\..\..\build\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Registry]
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocName}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
-Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".myp"; ValueData: ""
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
