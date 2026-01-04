@@ -92,5 +92,5 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 # 生成配置文件
 issDir = os.path.dirname(__file__)
-with open(os.path.join(issDir, 'InnoSetup.iss'), 'w+', encoding='gbk') as f:
+with open(os.path.join(issDir, 'InnoSetup.iss'), 'w+', encoding='utf-8-sig') as f:
     f.write(getIss())
