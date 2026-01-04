@@ -3,31 +3,32 @@
 import sys
 import os
 
-# 获取配置信息
+# 基础路径配置
 pyappDir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(pyappDir)
 from config.config import Config
 
+# 获取配置项
 appName = Config.appName
 appVersion = Config.appVersion[1:] if Config.appVersion.startswith('V') else Config.appVersion
 appDeveloper = Config.appDeveloper
 appBlogs = Config.appBlogs
-# 确保 GUID 内部不包含大括号，方便后续统一转义
+# 核心修复：确保 GUID 内部不包含大括号
 appISSID = Config.appISSID.strip('{}') 
 
-# 相对路径适配 (适配 GitHub Actions 环境)
+# 使用相对路径，解决 GitHub Actions 环境下的盘符不一致问题
 relBuildDir = "..\\..\\..\\build"
 relLogoPath = "..\\..\\icon\\logo.ico"
 relOutputDir = "..\\..\\..\\build_output"
 
 def getIss():
-    # 注意：在 Python f-string 中：
-    # {{ 渲染为 {
-    # {{{{ 渲染为 {{ (Inno Setup 用于表示纯文本 { 的转义符)
+    # 注意：在 Python f-string 中，{{ 渲染为 {， }} 渲染为 }
+    # 而 Inno Setup 需要两个 {{ 来表示一个纯文本的 {
+    # 因此这里使用了复杂的嵌套转义
     return f'''
 [Setup]
-; 修复 Inno Setup GUID 识别问题
-AppId={{{{{{appISSID}}}
+; 核心修复：GUID 必须使用双左大括号转义以供 Inno Setup 识别
+AppId={{{{{{{appISSID}}}
 AppName={appName}
 AppVersion={appVersion}
 AppPublisher={appDeveloper}
@@ -49,6 +50,7 @@ Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{{{{cm:CreateDesktopIcon}}"; GroupDescription: "{{{{cm:AdditionalIcons}}"; Flags: unchecked
 
 [Files]
+; 核心修复：指向相对路径并包含所有子文件
 Source: "{relBuildDir}\\*"; DestDir: "{{{{app}}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
@@ -59,11 +61,11 @@ Name: "{{{{autodesktop}}\\{appName}"; Filename: "{{{{app}}\\{appName}.exe"; Task
 Filename: "{{{{app}}\\{appName}.exe"; Description: "{{{{cm:LaunchProgram,{appName}}}"; Flags: nowait postinstall skipifsilent
 '''
 
-# 写入文件，使用 utf-8-sig 编码以兼容 Inno Setup 中文显示
+# 核心修复：使用 utf-8-sig 编码写入文件，确保 Inno Setup 能正确显示中文
 issDir = os.path.dirname(__file__)
 issPath = os.path.join(issDir, 'InnoSetup.iss')
 with open(issPath, 'w+', encoding='utf-8-sig') as f:
     f.write(getIss())
 
-# 使用纯英文打印，彻底解决控制台 UnicodeEncodeError
-print(f"Success: ISS config generated at {issPath}")
+# 核心修复：控制台仅打印英文，防止 GitHub Actions 环境下的编码报错
+print(f"Success: Inno Setup config generated at {issPath}")
