@@ -28,7 +28,7 @@ def getIss():
     return f'''
 [Setup]
 ; 核心修复：GUID 必须使用双左大括号转义以供 Inno Setup 识别
-AppId={{{{{{{appISSID}}}
+AppId={{{{{appISSID}}}
 AppName={appName}
 AppVersion={appVersion}
 AppPublisher={appDeveloper}
