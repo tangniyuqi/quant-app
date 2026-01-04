@@ -54,7 +54,7 @@ Name: "{{autoprograms}}\\{appName}"; Filename: "{{app}}\\{appName}.exe"
 Name: "{{autodesktop}}\\{appName}"; Filename: "{{app}}\\{appName}.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{{app}}\\{appName}.exe"; Description: "{{cm:LaunchProgram,{appName}}}"; Flags: nowait postinstall skipifsilent
+Filename: "{{app}}\\{appName}.exe"; Description: "{{cm:LaunchProgram,{appName}}}}"; Flags: nowait postinstall skipifsilent
 '''
 
 issDir = os.path.dirname(__file__)
