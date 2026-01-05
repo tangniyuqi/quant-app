@@ -254,7 +254,7 @@ class QuantTrader:
         try:
             positions = self.user.position.get('data', [])
 
-            for p in positions:
+            for p in positions: # 依次为：平安证券-银河证券
                 stock_code_new = p.get('证券代码') or p.get('stock_code') or ''
                 if stock_code == stock_code_new:
                     stock_name = p.get('证券名称') or p.get('stock_name') or ''

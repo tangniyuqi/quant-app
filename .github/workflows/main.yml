@@ -7,7 +7,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, macos-arm, macos-intel]
+        include:
+          - os: macos-13 # Intel 系列芯片 (x64)
+            arch: x64
+          - os: macos-latest # M 系列芯片 (ARM64)
+            arch: arm64
+          - os: windows-latest
+            arch: x64
     steps:
       - name: 拉取项目代码
         uses: actions/checkout@v4
@@ -49,10 +55,8 @@ jobs:
 
       - name: 开始打包
         run: |
-          if [ "${{ runner.os }}" == "macos-arm" ]; then
-            pnpm run build --mac --arch=arm64
-          elif [ "${{ runner.os }}" == "macos-intel" ]; then
-            pnpm run build --mac --arch=x64
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            pnpm run build --mac --${{ matrix.arch }}
           else
             pnpm run build
           fi
@@ -60,9 +64,8 @@ jobs:
       - name: 上传打包完成的程序包
         uses: actions/upload-artifact@v4
         with:
-          name: Setup_${{ runner.os == 'macos-arm' && 'macos-intel' || runner.os }}
+          name: Setup_${{ runner.os }}_${{ runner.arch }}
           retention-days: 1
-
           path: |
             build/*.dmg
             build/*.exe
