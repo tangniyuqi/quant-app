@@ -1,11 +1,11 @@
 
-filename = 'Sophon-v1.0.0_macOS'
-volume_name = 'Sophon-v1.0.0_macOS.dmg'
+filename = '智子量化-v1.0.0_macOS'
+volume_name = '智子量化-v1.0.0_macOS.dmg'
 format = 'UDBZ'
-files = ['/Users/a1/data/python/quant-app/pyapp/../build/Sophon.app', '/Users/a1/data/python/quant-app/pyapp/package/dmg/智子量化.webloc']
+files = ['/Users/a1/data/python/quant-app/pyapp/../build/智子量化.app', '/Users/a1/data/python/quant-app/pyapp/package/dmg/智子量化.webloc']
 symlinks = {'Applications': '/Applications'}
 icon_locations = {
-    'Sophon.app': (160, 120),
+    '智子量化.app': (160, 120),
     'Applications': (430, 120),
     '智子量化.webloc': (450, 243)
 }

@@ -44,6 +44,9 @@ jobs:
           python-version: "3.13"
           cache: "pip"
 
+      - name: 初始化打包环境
+        run: pnpm run init
+
       - name: 配置 macOS 证书
         if: matrix.os == 'macos-latest'
         env:
