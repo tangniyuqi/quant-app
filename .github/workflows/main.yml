@@ -60,6 +60,7 @@ jobs:
           else
             pnpm run build
           fi
+        shell: bash
 
       - name: 上传打包完成的程序包
         uses: actions/upload-artifact@v4
