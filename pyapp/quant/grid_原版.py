@@ -62,12 +62,6 @@ class GridStrategy(BaseStrategy):
         max_resets = int(config.get('maxResets', 0))
         reset_ratio = float(config.get('resetRatio', 0))
         reset_count = 0
-        last_grid_index = 0
-        
-        # 运行时状态记录
-        last_trade_time = 0      # 上次交易时间戳
-        last_trade_price = 0     # 上次交易价格
-        grid_repeat_counts = {}  # 各层级已交易次数 {index: count}
 
         # 基准价参数
         base_price_type = int(config.get('basePriceType', 0)) # 0:无/默认 1:指定 2:当前 3:开盘 4:昨收
@@ -78,12 +72,6 @@ class GridStrategy(BaseStrategy):
         trade_quantity_type = int(config.get('tradeQuantityType', 1)) # 1:固定 2:倍数
         auto_align_grid = bool(config.get('autoAlignGrid', False))
         auto_open_position = bool(config.get('autoOpenPosition', False))
-        allow_repeat_trade = bool(config.get('allowRepeatTrade', True))
-        
-        # 交易保护参数
-        min_price_gap = float(config.get('minPriceGap', 0.1)) / 100.0
-        min_trade_interval = int(config.get('minTradeInterval', 5))
-        max_repeat_times = int(config.get('maxRepeatTimes', 3))
         
         # 价格区间
         upper_price = float(config.get('upperPrice', 0))
@@ -373,73 +361,12 @@ class GridStrategy(BaseStrategy):
                 else:
                     curr_index = self._get_grid_index(current_price, base_price)
                     
-                    # 交易前置检查函数
-                    def check_trade_safety(action_type, price, index):
-                        nonlocal last_trade_time, last_trade_price, grid_repeat_counts
-                        
-                        # 1. 最小交易间隔检查
-                        if time.time() - last_trade_time < min_trade_interval:
-                            # self.log(f"未满足最小交易间隔 {min_trade_interval}s", "DEBUG")
-                            return False
-                            
-                        # 2. 最小价差检查 (如果是重复交易或震荡)
-                        if last_trade_price > 0:
-                            gap = abs(price - last_trade_price) / last_trade_price
-                            if gap < min_price_gap:
-                                # self.log(f"未满足最小价差 {min_price_gap*100}% (当前 {gap*100:.2f}%)", "DEBUG")
-                                return False
-
-                        # 3. 同层级最大交易次数检查
-                        current_count = grid_repeat_counts.get(index, 0)
-                        
-                        if index == last_grid_index and current_count >= max_repeat_times:
-                            # self.log(f"层级 {index} 交易次数已达上限 {max_repeat_times}", "DEBUG")
-                            return False
-                            
-                        return True
-
-                    # 更新交易状态函数
-                    def update_trade_state(price, index):
-                        nonlocal last_trade_time, last_trade_price, grid_repeat_counts, last_grid_index
-                        last_trade_time = time.time()
-                        last_trade_price = price
-                        
-                        # 如果是新层级，重置该层级计数
-                        if index != last_grid_index:
-                            grid_repeat_counts[index] = 1
-                        else:
-                            grid_repeat_counts[index] = grid_repeat_counts.get(index, 0) + 1
-                            
-                        last_grid_index = index
-
-                    # 优化：支持同层级震荡交易（重复买入卖出）
-                    # 只要跨过网格线（index变化）就触发，无需完全穿越
-                    # 或者：允许同层级重复交易且满足价差
-                    is_sell_signal = False
-                    is_buy_signal = False
-                    
                     if curr_index > last_grid_index:
-                        is_sell_signal = True
-                    elif curr_index < last_grid_index:
-                        is_buy_signal = True
-                    elif allow_repeat_trade and curr_index == last_grid_index and last_trade_price > 0:
-                        if current_price > last_trade_price:
-                            is_sell_signal = True
-                        elif current_price < last_trade_price:
-                            is_buy_signal = True
-
-                    if is_sell_signal:
                         # 价格上涨 -> 卖出
                         if trade_direction not in [0, 2]: # 0:双向 1:只买 2:只卖
                             # self.log(f"任务({id})触发卖出信号但方向限制，跳过")
-                            if curr_index != last_grid_index:
-                                last_grid_index = curr_index
+                            last_grid_index = curr_index
                             continue
-                        
-                        # 安全检查
-                        if not check_trade_safety('sell', current_price, curr_index):
-                             time.sleep(1) # 避免死循环空转
-                             continue
 
                         # 计算交易量
                         trade_vol = base_quantity
@@ -463,30 +390,17 @@ class GridStrategy(BaseStrategy):
                                 self.log(f"任务({id})卖出委托已发送：{res}")
                                 self._save_trade_record("sell", current_price, trade_vol, f"Grid Sell {curr_index}")
                                 self._update_task_position(stock_code)
-                                update_trade_state(current_price, curr_index)
-                            # 卖出失败时
-                            elif allow_repeat_trade:
-                                # 如果允许重复交易，不更新 last_grid_index，允许下次重试
-                                pass
-                            else:
-                                # 否则跳过该网格
                                 last_grid_index = curr_index
                         else:
                             self.log(f"任务({id})可卖持仓不足。需 {trade_vol}，有 {available}", "WARNING")
-                            if not allow_repeat_trade:
-                                last_grid_index = curr_index 
+                            last_grid_index = curr_index 
                              
-                    elif is_buy_signal:
+                    elif curr_index < last_grid_index:
                         # 价格下跌 -> 买入
                         if trade_direction not in [0, 1]: # 0:双向 1:只买 2:只卖
                             # self.log(f"任务({id})触发买入信号但方向限制，跳过")
                             last_grid_index = curr_index
                             continue
-                            
-                        # 安全检查
-                        if not check_trade_safety('buy', current_price, curr_index):
-                             time.sleep(1)
-                             continue
 
                         # 计算交易量
                         trade_vol = base_quantity
@@ -544,17 +458,9 @@ class GridStrategy(BaseStrategy):
                                 self.log(f"任务({id})买入委托已发送：{res}")
                                 self._save_trade_record("buy", current_price, trade_vol, f"Grid Buy {curr_index}")
                                 self._update_task_position(stock_code)
-                                update_trade_state(current_price, curr_index)
-                            # 买入失败时
-                            elif allow_repeat_trade:
-                                # 如果允许重复交易，不更新 last_grid_index，允许下次重试
-                                pass
-                            else:
-                                # 否则跳过该网格
                                 last_grid_index = curr_index
                         else:
-                            if not allow_repeat_trade:
-                                last_grid_index = curr_index
+                            last_grid_index = curr_index
             
             except Exception as e:
                 self.log(f"任务({id})循环错误：{e}", "ERROR")
