@@ -27,6 +27,8 @@ class AppUpdate:
     def check(self):
         '''检查是否有更新：0=>有新版本; -1=>联网失败; 1=>已经是最新版本'''
         resNewInfo = self.__getNewInfo()
+        print(resNewInfo)
+        print(self.__compareVersion(Config.appVersion, resNewInfo['version']))
         if not resNewInfo['status']:
             # 联网失败
             return {'code': -1, 'msg': '连接服务器失败，请稍后再试'}
@@ -38,7 +40,7 @@ class AppUpdate:
                 # 已是最新版本
                 return {'code': 1, 'msg': f'{oldVersion}已是最新版本'}
             else:
-                return {'code': 0, 'msg': f'有新版{newVersion}可供更新，当前版本为{oldVersion}。', 'htmlUrl': resNewInfo['htmlUrl'], 'assets': resNewInfo['assets'], 'body': resNewInfo['body']}
+                return {'code': 0, 'msg': f'有新版{newVersion}可供更新，当前版本为{oldVersion}。', 'link': resNewInfo['link'], 'assets': resNewInfo['assets'], 'body': resNewInfo['body']}
 
     def run(self):
         '''执行更新：0=>下载程序包成功; -1=>联网失败; -2=>下载程序包失败; 1=>已经是最新版本'''
@@ -62,14 +64,14 @@ class AppUpdate:
             # 3秒后连接超时，3秒后读取超时
             r = httpx.get(Config.appUpdateUrl, timeout=(3, 3))
             resJson = r.json()
-            version = resJson['name']    # 版本号
-            htmlUrl = resJson['html_url']    # 下载页面
+            version = resJson['version']    # 版本号
+            link = resJson['link']    # 下载页面
             assets = resJson['assets']    # 下载资源
-            body = resJson['body']    # 版本介绍
+            body = resJson['content']    # 版本介绍
             return {
                 'status': True,
                 'version': version,
-                'htmlUrl': htmlUrl,
+                'link': link,
                 'assets': assets,
                 'body': body
             }
@@ -97,15 +99,18 @@ class AppUpdate:
     def __getApp(self, assetsList):
         '''获取程序包'''
         # 判断更新哪个系统版本
-        appExt = '.exe'
+        target_suffix = "Windows_X64.zip"
         if Config.appIsMacOS:
-            appExt = '.dmg'
+            if self.IfMacAppleM():
+                target_suffix = "macOS_ARM64.zip"
+            else:
+                target_suffix = "macOS_X64.zip"
+
         for assets in assetsList:
             name = assets['name']
-            ext = os.path.splitext(name)[-1]
-            if ext == appExt:
+            if name.endswith(target_suffix):
                 size = assets['size']
-                url = assets['browser_download_url']
+                url = assets['url']
                 downloadPath = os.path.join(Config.downloadDir, name)
                 # 超时重连3次
                 timeoutCount = 0
@@ -115,6 +120,7 @@ class AppUpdate:
                         timeoutCount += 1
                     else:
                         return resDownload
+        return {'status': False, 'msg': '未找到匹配当前系统的安装包'}
 
     def __download(self, url, downloadPath, size):
         '''下载大文件'''

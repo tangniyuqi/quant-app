@@ -1,10 +1,14 @@
 <script setup>
 import HelloWorld from './components/HelloWorld.vue'
+import BtnUpdate from './components/BtnUpdate.vue'
 </script>
 
 
 <template>
   <div class="center-col h100 w100 scroll">
+    <div style="position: absolute; top: 10px; right: 10px;">
+      <BtnUpdate />
+    </div>
     <div class="logo-box">
       <img alt="pywebview logo" src="./assets/pywebview.png" />
       <img class="ml50 mr50" alt="pyinstaller logo" src="./assets/pyinstaller.png" />

@@ -28,7 +28,7 @@ class Config:
     appDeveloper = "Tang Ming"  # 应用开发者
     appBlogs = "https://go.noooya.com"  # 个人博客
     appPackage = 'app.sophon.quant'    # 应用包名，用于在本地电脑生成 vip.pangao.ppx 唯一文件夹
-    appUpdateUrl = 'https://api.github.com/repos/tangniyuqi/quant-app/releases/latest'    # 获取程序更新信息 https://api.github.com/repos/pangao1990/ppx/releases/latest
+    appUpdateUrl = 'https://go.noooya.com/uploads/client/update.json'    # 获取程序更新信息 https://api.github.com/repos/pangao1990/ppx/releases/latest
     appISSID = 'AC18B034-AC83-EA47-AC87-3D3FC82BA9A1'    # Inno Setup 打包唯一编号。在执行 pnpm run init 之前，请设置为空，程序会自动生成唯一编号，生成后请勿修改！！！
 
     ##
