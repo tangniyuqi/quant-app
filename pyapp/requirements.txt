@@ -14,3 +14,6 @@ cryptography==46.0.3
 # tinyaes==1.1.0
 # sqlalchemy==2.0.7
 # alembic==1.10.2
+
+# Pyarmor 运行时支持
+pyarmor.cli.core==8.1.0
