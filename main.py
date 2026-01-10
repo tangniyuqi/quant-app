@@ -11,7 +11,7 @@ import argparse
 import mimetypes
 import logging
 import webview
-from api_dist.api.api import API
+from api.api import API
 from pyapp.config.config import Config
 from pyapp.db.db import DB
 

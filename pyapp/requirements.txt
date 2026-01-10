@@ -16,4 +16,4 @@ cryptography==46.0.3
 # alembic==1.10.2
 
 # Pyarmor 运行时支持
-pyarmor.cli.core==8.1.0
+# pyarmor.cli.core==8.1.0

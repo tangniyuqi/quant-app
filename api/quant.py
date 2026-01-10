@@ -10,7 +10,7 @@ usage: 在Javascript中调用window.pywebview.api.<methodname>(<parameters>)
 
 import json
 from api.system import System
-from pyapp.quant_dist.quant.manager import TaskManager
+from pyapp.quant.manager import TaskManager
 
 class QuantAPI:
     '''量化交易API'''

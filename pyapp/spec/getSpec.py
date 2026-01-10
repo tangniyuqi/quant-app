@@ -32,8 +32,8 @@ logoExt = 'icns' if ifMac else 'png' if ifLinux else 'ico'
 addDll = ''
 # 添加文件夹到打包中
 addModules = "('../../gui/dist', 'web'), ('../../static', 'static')"
-if os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'pyarmor_runtime_000000')):
-    addModules += ", ('../../pyarmor_runtime_000000', 'pyarmor_runtime_000000')"
+# if os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'pyarmor_runtime_000000')):
+#     addModules += ", ('../../pyarmor_runtime_000000', 'pyarmor_runtime_000000')"
 
 
 # spec配置文件 前半部分通用格式
