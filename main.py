@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-Author: 唐明
-LastEditors: 潘高
+Author: Tang Ming
 Date: 2025-12-01 09:20:45
 LastEditTime: 2025-12-15 21:27:30
 Description: 生成客户端主程序
-usage: 运行前，请确保本机已经搭建Python3开发环境，且已经安装 pywebview 模块。
 '''
 import os
 import argparse
 import mimetypes
 import logging
 import webview
-from api.api import API
+from api_dist.api.api import API
 from pyapp.config.config import Config
 from pyapp.db.db import DB
 

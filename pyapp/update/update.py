@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-FilePath: /PPX/pyapp/update/update.py
-Author: 潘高
-LastEditors: 潘高
-Date: 2023-03-23 21:24:30
-LastEditTime: 2023-06-01 15:55:30
+FilePath: /quant-app/pyapp/update/update.py
+Author: Tang Ming
+Date: 2025-12-23 21:24:30
+LastEditTime: 2026-01-01 15:55:30
 Description: 应用更新
 usage: 运行前，请确保本机已经搭建Python3开发环境，且已经安装 httpx 模块。
-        详细教程请移步至 https://blog.pangao.vip/Python环境搭建及模块安装/
 '''
 
 import os
