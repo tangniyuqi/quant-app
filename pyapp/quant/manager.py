@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from .grid import GridStrategy
+from .strategies.grid import GridStrategy
+from .strategies.event import EventStrategy
 from .trader import QuantTrader
 
 class TaskManager:
@@ -21,7 +22,11 @@ class TaskManager:
         if strategy_id == 10001: # 网格策略
             if log_callback:
                 log_callback('INFO', 'TaskManager', f"交易任务 {task_id}，正在启动中...")
-            strategy = GridStrategy(data, log_callback)        
+            strategy = GridStrategy(data, log_callback)
+        elif strategy_id == 10006: # 事件驱动AI策略
+            if log_callback:
+                log_callback('INFO', 'TaskManager', f"交易任务 {task_id}，正在启动事件驱动(AI)策略...")
+            strategy = EventStrategy(data, log_callback)
         else:
             if log_callback:
                 log_callback('ERROR', 'TaskManager', f"交易任务 {task_id} 启动失败，暂不支持的策略类型")

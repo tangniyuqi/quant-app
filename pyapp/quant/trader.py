@@ -378,7 +378,6 @@ class QuantTrader:
             
             if self.backend_url and self.token:
                 base_url = self.backend_url
-                base_url = base_url.rstrip('/')
 
                 if base_url.endswith('/'):
                     base_url = base_url[:-1]

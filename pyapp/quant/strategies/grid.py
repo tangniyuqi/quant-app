@@ -4,7 +4,7 @@ import json
 import requests
 import math
 import datetime
-from .base import BaseStrategy
+from ..base import BaseStrategy
 
 class GridStrategy(BaseStrategy):
     def __init__(self, data, log_callback=None):
