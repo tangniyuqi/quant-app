@@ -43,8 +43,7 @@ class BaseStrategy:
     def stop(self):
         self.running = False
         self.trader.stop_balance_monitor()
-        #if self.thread and self.thread != threading.current_thread():
-        if self.thread:
+        if self.thread and self.thread != threading.current_thread():
             self.thread.join(timeout=1)
 
     def _run_loop(self):

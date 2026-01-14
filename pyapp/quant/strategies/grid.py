@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import time
+import threading
 import json
 import requests
 import math
@@ -23,6 +24,19 @@ class GridStrategy(BaseStrategy):
             self.log_grid_base = math.log(1 + grid_percent)
         else:
             self.log_grid_base = 0.01
+
+        # 任务有效期
+        self.expiration_time = None
+        validity_period = config.get('validityPeriod')
+        if validity_period:
+            try:
+                # validityPeriod 可能是 YYYY-MM-DD 字符串
+                if isinstance(validity_period, str):
+                    dt = datetime.datetime.strptime(validity_period[:10], "%Y-%m-%d")
+                    # 设置为当天收盘时间 (15:00:00)
+                    self.expiration_time = dt.replace(hour=15, minute=0, second=0, microsecond=0)
+            except Exception as e:
+                self.log(f"配置错误: 无效的有效期格式 {validity_period}: {e}", "ERROR")
 
     def run(self):
         id = self.data.get('id', 0)
@@ -259,6 +273,19 @@ class GridStrategy(BaseStrategy):
 
         while self.running:
             try:
+                # 0. 有效期检查
+                if self.expiration_time:
+                    now = datetime.datetime.now()
+                    if now > self.expiration_time:
+                        self.log(f"任务({id})有效期已至 ({self.expiration_time})，自动停止任务...", "WARNING")
+                        
+                        # 自动停止任务
+                        from ..manager import TaskManager
+                        TaskManager().stop_task(id)
+                        
+                        # 退出当前循环，结束 _run_loop
+                        break
+
                 # 检查交易时间
                 trading_status = self._is_trading_time()
                 
