@@ -258,8 +258,8 @@ class QuantTrader:
                 stock_code_new = p.get('证券代码') or p.get('stock_code') or ''
                 if stock_code == stock_code_new:
                     stock_name = p.get('证券名称') or p.get('stock_name') or ''
-                    total_quantity = p.get('股票余额') or p.get('stock_amount') or 0
-                    available_quantity = p.get('可用余额') or p.get('enable_amount') or 0
+                    total_quantity = p.get('股票余额') p.get('持仓数量') or p.get('stock_amount') or 0
+                    available_quantity = p.get('可用余额') or p.get('可用数量') orp.get('enable_amount') or 0
                     frozen_quantity = p.get('冻结数量') or p.get('frozen_quantity') or 0
                     cost_price = p.get('参考成本价') or p.get('成本价') or p.get('cost_price') or 0.0
                     current_price = p.get('当前价') or p.get('市价') or p.get('current_price') or 0.0
