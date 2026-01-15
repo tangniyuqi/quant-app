@@ -92,6 +92,10 @@ class GridStrategy(BaseStrategy):
         trade_quantity_type = int(config.get('tradeQuantityType', 1)) # 1:固定 2:倍数
         auto_align_grid = bool(config.get('autoAlignGrid', False))
         auto_open_position = bool(config.get('autoOpenPosition', False))
+        open_position_type = int(config.get('openPositionType', 0))
+        open_position_quantity = int(config.get('openPositionQuantity', 100))
+        open_position_amount = float(config.get('openPositionAmount', 10000))
+        open_position_ratio = float(config.get('openPositionRatio', 10))
         allow_repeat_trade = bool(config.get('allowRepeatTrade', True))
         
         # 交易保护参数
@@ -239,28 +243,52 @@ class GridStrategy(BaseStrategy):
         # 5.1 自动建仓逻辑
         if auto_open_position:
             pos = self.trader.get_position(stock_code)
-            current_hold = pos.get('total', 0)
+            current_hold = pos.get('total_quantity', 0)
             if current_hold == 0:
-                self.log(f"任务({id})检测到持仓为0且开启自动建仓，正在买入底仓 {base_quantity}...")
+                open_vol = 0
+                calc_desc = ""
                 
-                # 检查资金
-                balance = self.trader.get_balance()
-                available_balance = balance.get('available_balance', 0)
-                need_cash = base_quantity * current_price
-                
-                if available_balance >= need_cash:
-                    reason = f"任务: {name}({id})\n原因: 自动建仓"
-                    res = self.trader.buy(stock_code, current_price, base_quantity, reason=reason)
-                    if res:
-                        self.log(f"任务({id})自动建仓委托已发送：{res}")
-                        self._save_trade_record("buy", current_price, base_quantity, "Auto Open")
-                        self._update_task_position(stock_code)
-                        # 重新获取持仓以确保状态同步
-                        time.sleep(1)
-                    else:
-                        self.log(f"任务({id})自动建仓失败！", "ERROR")
+                if open_position_type == 0:
+                    open_vol = base_quantity
+                    calc_desc = f"按单格基数 {base_quantity}"
+                elif open_position_type == 1:
+                    open_vol = open_position_quantity
+                    calc_desc = f"按指定股数 {open_position_quantity}"
+                elif open_position_type == 2:
+                    if current_price > 0:
+                        open_vol = int(open_position_amount / current_price / 100) * 100
+                        calc_desc = f"按金额 {open_position_amount} (折合 {open_vol} 股)"
+                elif open_position_type == 3:
+                    balance = self.trader.get_balance()
+                    total_asset = balance.get('total_asset', 0)
+                    if current_price > 0 and total_asset > 0:
+                        target_amount = total_asset * (open_position_ratio / 100.0)
+                        open_vol = int(target_amount / current_price / 100) * 100
+                        calc_desc = f"按总资产 {total_asset} 的 {open_position_ratio}% (折合 {open_vol} 股)"
+
+                if open_vol < 100:
+                    self.log(f"任务({id})自动建仓计算数量为 {open_vol} (小于100)，取消建仓 ({calc_desc})", "WARNING")
                 else:
-                    self.log(f"任务({id})自动建仓失败：资金不足(需{need_cash}, 有{available_balance})", "WARNING")
+                    self.log(f"任务({id})检测到持仓为0且开启自动建仓，正在买入底仓... {calc_desc}")
+                    
+                    # 检查资金
+                    balance = self.trader.get_balance()
+                    available_balance = balance.get('available_balance', 0)
+                    need_cash = open_vol * current_price
+                    
+                    if available_balance >= need_cash:
+                        reason = f"任务: {name}({id})\n原因: 自动建仓"
+                        res = self.trader.buy(stock_code, current_price, open_vol, reason=reason)
+                        if res:
+                            self.log(f"任务({id})自动建仓委托已发送：{res}")
+                            self._save_trade_record("buy", current_price, open_vol, "Auto Open")
+                            self._update_task_position(stock_code)
+                            # 重新获取持仓以确保状态同步
+                            time.sleep(1)
+                        else:
+                            self.log(f"任务({id})自动建仓失败！", "ERROR")
+                    else:
+                        self.log(f"任务({id})自动建仓失败：资金不足(需{need_cash}, 有{available_balance})", "WARNING")
 
         # 优化：重用会话
         self.session = requests.Session()
@@ -292,14 +320,14 @@ class GridStrategy(BaseStrategy):
                 # 非交易时间
                 if not trading_status:
                     if not is_paused:
-                        self.log(f"非交易日期或时段（周一到周五：9:25-11:30，13:00-15:00），等待开盘...", "WARNING")
+                        self.log(f"任务({id})非交易日期或时段（周一到周五：9:25-11:30，13:00-15:00），等待开盘...", "WARNING")
                         is_paused = True
                     time.sleep(10)
                     continue
                 
                 # 交易时间
                 if is_paused:
-                    self.log(f"交易时间到达，恢复运行...", "INFO")
+                    self.log(f"任务({id})交易时间到达，恢复运行...", "INFO")
                     is_paused = False
 
                 # 获取价格
