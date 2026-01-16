@@ -103,6 +103,11 @@ class GridStrategy(BaseStrategy):
         min_trade_interval = int(config.get('minTradeInterval', 5))
         max_repeat_times = int(config.get('maxRepeatTimes', 3))
         
+        # 交易模式：全区间 vs 分治
+        # deploymentMode: FULL_RANGE(默认) - 全区间网格，任意位置均可买卖
+        #                 PARTITIONED - 分治模式，基准线之上只卖不买，基准线之下只买不卖
+        deployment_mode = config.get('deploymentMode', 'FULL_RANGE')
+
         # 价格区间
         upper_price = float(config.get('upperPrice', 0))
         lower_price = float(config.get('lowerPrice', 0))
@@ -485,6 +490,15 @@ class GridStrategy(BaseStrategy):
 
                     if is_sell_signal:
                         # 价格上涨 -> 卖出
+                        
+                        # 分治模式检查：基准线之下禁止卖出（除非是止盈止损，但止盈止损在前面已处理）
+                        # 注意：curr_index < 0 表示在基准线之下
+                        if deployment_mode == 'PARTITIONED' and curr_index < 0:
+                            # self.log(f"任务({id})分治模式限制：基准线之下不执行网格卖出 (当前 {curr_index})", "DEBUG")
+                            if curr_index != last_grid_index:
+                                last_grid_index = curr_index
+                            continue
+
                         if trade_direction not in [0, 2]: # 0:双向 1:只买 2:只卖
                             # self.log(f"任务({id})触发卖出信号但方向限制，跳过")
                             if curr_index != last_grid_index:
@@ -533,6 +547,14 @@ class GridStrategy(BaseStrategy):
                              
                     elif is_buy_signal:
                         # 价格下跌 -> 买入
+                        
+                        # 分治模式检查：基准线之上禁止买入
+                        # 注意：curr_index > 0 表示在基准线之上
+                        if deployment_mode == 'PARTITIONED' and curr_index > 0:
+                            # self.log(f"任务({id})分治模式限制：基准线之上不执行网格买入 (当前 {curr_index})", "DEBUG")
+                            last_grid_index = curr_index
+                            continue
+
                         if trade_direction not in [0, 1]: # 0:双向 1:只买 2:只卖
                             # self.log(f"任务({id})触发买入信号但方向限制，跳过")
                             last_grid_index = curr_index
