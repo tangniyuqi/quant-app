@@ -107,6 +107,7 @@ class GridStrategy(BaseStrategy):
         # deploymentMode: FULL_RANGE(默认) - 全区间网格，任意位置均可买卖
         #                 PARTITIONED - 分治模式，基准线之上只卖不买，基准线之下只买不卖
         deployment_mode = config.get('deploymentMode', 'FULL_RANGE')
+        self.log(f"任务({id})网格模式: {deployment_mode}")
 
         # 价格区间
         upper_price = float(config.get('upperPrice', 0))
@@ -438,7 +439,7 @@ class GridStrategy(BaseStrategy):
                         nonlocal last_trade_time, last_trade_price, grid_repeat_counts
                         
                         # 1. 最小交易间隔检查
-                        if time.time() - last_trade_time < min_trade_interval:
+                        if min_trade_interval > 0 and time.time() - last_trade_time < min_trade_interval:
                             # self.log(f"未满足最小交易间隔 {min_trade_interval}s", "DEBUG")
                             return False
                             
@@ -450,11 +451,12 @@ class GridStrategy(BaseStrategy):
                                 return False
 
                         # 3. 同层级最大交易次数检查
-                        current_count = grid_repeat_counts.get(index, 0)
-                        
-                        if index == last_grid_index and current_count >= max_repeat_times:
-                            # self.log(f"层级 {index} 交易次数已达上限 {max_repeat_times}", "DEBUG")
-                            return False
+                        # max_repeat_times 为 0 时表示不限制
+                        if max_repeat_times > 0:
+                            current_count = grid_repeat_counts.get(index, 0)
+                            if index == last_grid_index and current_count >= max_repeat_times:
+                                # self.log(f"层级 {index} 交易次数已达上限 {max_repeat_times}", "DEBUG")
+                                return False
                             
                         return True
 
@@ -494,7 +496,7 @@ class GridStrategy(BaseStrategy):
                         # 分治模式检查：基准线之下禁止卖出（除非是止盈止损，但止盈止损在前面已处理）
                         # 注意：curr_index < 0 表示在基准线之下
                         if deployment_mode == 'PARTITIONED' and curr_index < 0:
-                            # self.log(f"任务({id})分治模式限制：基准线之下不执行网格卖出 (当前 {curr_index})", "DEBUG")
+                            self.log(f"任务({id})分治模式限制：基准线之下不执行网格卖出 (当前 {curr_index})", "DEBUG")
                             if curr_index != last_grid_index:
                                 last_grid_index = curr_index
                             continue
@@ -551,7 +553,7 @@ class GridStrategy(BaseStrategy):
                         # 分治模式检查：基准线之上禁止买入
                         # 注意：curr_index > 0 表示在基准线之上
                         if deployment_mode == 'PARTITIONED' and curr_index > 0:
-                            # self.log(f"任务({id})分治模式限制：基准线之上不执行网格买入 (当前 {curr_index})", "DEBUG")
+                            self.log(f"任务({id})分治模式限制：基准线之上不执行网格买入 (当前 {curr_index})", "DEBUG")
                             last_grid_index = curr_index
                             continue
 
