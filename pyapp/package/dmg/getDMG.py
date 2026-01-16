@@ -67,13 +67,13 @@ format = 'UDBZ'
 files = ['""" + pyappDir + """/../build/""" + appName + """.app', '""" + pyappDir + """/package/dmg/智子量化.webloc']
 symlinks = {'Applications': '/Applications'}
 icon_locations = {
-    '""" + appName + """.app': (360, 380),
-    'Applications': (1000, 380),
-    '智子量化.webloc': (1000, 580)
+    '""" + appName + """.app': (160, 120),
+    'Applications': (430, 120),
+    '智子量化.webloc': (450, 243)
 }
-window_rect = ((200, 200), (1360, 760))
-icon_size = 128
-text_size = 14
+window_rect = ((200, 200), (600, 350))
+icon_size = 60
+text_size = 12
 badge_icon = '""" + pyappDir + """/icon/logo.icns'
 background = '""" + pyappDir + """/package/dmg/bg.jpg'
 """
