@@ -109,6 +109,8 @@ class QuantTrader:
       
     def get_stock_quote(self, ts_code):
         '''获取股票行情：现价、开盘价、昨收价'''
+        stock_code = ''.join(filter(str.isdigit, ts_code)) or ts_code
+
         # 1. 尝试 Tushare
         if self.data_platform == 'tushare' and self.tushare:
             try:

@@ -37,6 +37,8 @@ class GridStrategy(BaseStrategy):
                     self.expiration_time = dt.replace(hour=15, minute=0, second=0, microsecond=0)
             except Exception as e:
                 self.log(f"配置错误: 无效的有效期格式 {validity_period}: {e}", "ERROR")
+        
+        self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
 
     def run(self):
         id = self.data.get('id', 0)
@@ -85,6 +87,9 @@ class GridStrategy(BaseStrategy):
          
         waiting_for_fallback = False
         peak_price = 0.0
+        
+        waiting_for_rebound = False
+        valley_price = 0.0
 
         # 基准价参数
         base_price_type = int(config.get('basePriceType', 0)) # 0:无/默认 1:指定 2:当前 3:开盘 4:昨收
@@ -99,13 +104,14 @@ class GridStrategy(BaseStrategy):
         open_position_quantity = int(config.get('openPositionQuantity', 100))
         open_position_amount = float(config.get('openPositionAmount', 10000))
         open_position_ratio = float(config.get('openPositionRatio', 10))
-        allow_repeat_trade = bool(config.get('allowRepeatTrade', True))
         
         fallback_ratio = float(config.get('fallbackRatio', 0)) / 100.0
+        rebound_ratio = float(config.get('reboundRatio', 0)) / 100.0
+        
         # 交易保护参数
+        max_repeat_times = int(config.get('maxRepeatTimes', 0))
         min_price_gap = float(config.get('minPriceGap', 0.1)) / 100.0
         min_trade_interval = int(config.get('minTradeInterval', 5))
-        max_repeat_times = int(config.get('maxRepeatTimes', 3))
         
         # 交易模式：全区间 vs 分治
         # deploymentMode: FULL_RANGE(默认) - 全区间策略，任意位置均可买卖
@@ -202,6 +208,8 @@ class GridStrategy(BaseStrategy):
             
         # 初始层级状态
         last_layer_index = self._get_layer_index(current_price, base_price)
+        if trade_layers > 0:
+            last_layer_index = max(-trade_layers, min(trade_layers, last_layer_index))
         self.log(f"任务({id})初始价格：{current_price}, 索引：{last_layer_index}")
         
         # 启动时自动对齐层级（一次性买卖）
@@ -351,6 +359,7 @@ class GridStrategy(BaseStrategy):
                 if max_resets > 0 and reset_count < max_resets and reset_ratio > 0:
                     if base_price <= 0:
                         base_price = current_price
+                        time.sleep(monitor_interval)
                         continue
 
                     deviation = (current_price - base_price) / base_price
@@ -389,6 +398,7 @@ class GridStrategy(BaseStrategy):
 
                         reset_count += 1
                         self.log(f"任务({id})重置完成，新基准：{base_price:.3f}, 范围：[{lower_price:.3f}, {upper_price:.3f}]")
+                        time.sleep(monitor_interval)
                         continue
 
                 # 7. 风险控制 (止盈止损)
@@ -437,6 +447,8 @@ class GridStrategy(BaseStrategy):
                     pass
                 else:
                     curr_index = self._get_layer_index(current_price, base_price)
+                    if trade_layers > 0:
+                        curr_index = max(-trade_layers, min(trade_layers, curr_index))
                     
                     # 交易前置检查函数
                     def check_trade_safety(action_type, price, index):
@@ -491,7 +503,7 @@ class GridStrategy(BaseStrategy):
                         raw_sell_signal = True
                     elif curr_index < last_layer_index:
                         raw_buy_signal = True
-                    elif allow_repeat_trade and curr_index == last_layer_index and last_trade_price > 0:
+                    elif curr_index == last_layer_index and last_trade_price > 0:
                         if current_price > last_trade_price:
                             raw_sell_signal = True
                         elif current_price < last_trade_price:
@@ -500,6 +512,7 @@ class GridStrategy(BaseStrategy):
                     sell_allowed = trade_direction in [0, 2] and not (deployment_mode == 'PARTITIONED' and curr_index < 0)
                     buy_allowed = trade_direction in [0, 1] and not (deployment_mode == 'PARTITIONED' and curr_index > 0)
 
+                    # 1. 回落卖出逻辑
                     if fallback_ratio > 0 and sell_allowed:
                         if waiting_for_fallback:
                             if current_price > peak_price:
@@ -509,27 +522,38 @@ class GridStrategy(BaseStrategy):
                                 self.log(f"任务({id})价格回落至原层级线({curr_index})，取消回落卖出监控。")
                                 waiting_for_fallback = False
                                 peak_price = 0
-                                if buy_allowed:
-                                    is_buy_signal = raw_buy_signal
                             elif current_price <= peak_price * (1 - fallback_ratio):
                                 self.log(f"任务({id})满足回落卖出条件：峰值 {peak_price} -> 当前 {current_price}")
                                 is_sell_signal = True
                                 sell_triggered_by_fallback = True
-                            else:
-                                pass
-                        else:
-                            if raw_sell_signal:
-                                waiting_for_fallback = True
-                                peak_price = current_price
-                                self.log(f"任务({id})触发上涨({curr_index})，进入回落监控... (目标回落 {fallback_ratio*100}%)")
-                            else:
-                                if buy_allowed:
-                                    is_buy_signal = raw_buy_signal
-                    else:
-                        if sell_allowed:
-                            is_sell_signal = raw_sell_signal
-                        if buy_allowed:
-                            is_buy_signal = raw_buy_signal
+                        elif raw_sell_signal:
+                            waiting_for_fallback = True
+                            peak_price = current_price
+                            self.log(f"任务({id})触发上涨({curr_index})，进入回落监控... (目标回落 {fallback_ratio*100}%)")
+                    elif sell_allowed:
+                        is_sell_signal = raw_sell_signal
+
+                    # 2. 反弹买入逻辑
+                    buy_triggered_by_rebound = False
+                    if rebound_ratio > 0 and buy_allowed:
+                        if waiting_for_rebound:
+                            if valley_price == 0 or current_price < valley_price:
+                                valley_price = current_price
+                            
+                            if curr_index >= last_layer_index:
+                                self.log(f"任务({id})价格反弹至原层级线({curr_index})，取消反弹买入监控。")
+                                waiting_for_rebound = False
+                                valley_price = 0
+                            elif current_price >= valley_price * (1 + rebound_ratio):
+                                self.log(f"任务({id})满足反弹买入条件：谷值 {valley_price} -> 当前 {current_price}")
+                                is_buy_signal = True
+                                buy_triggered_by_rebound = True
+                        elif raw_buy_signal:
+                            waiting_for_rebound = True
+                            valley_price = current_price
+                            self.log(f"任务({id})触发下跌({curr_index})，进入反弹监控... (目标反弹 {rebound_ratio*100}%)")
+                    elif buy_allowed:
+                        is_buy_signal = raw_buy_signal
 
                     if is_sell_signal:
                         # 价格上涨 -> 卖出
@@ -543,6 +567,7 @@ class GridStrategy(BaseStrategy):
                                 peak_price = 0
                             if curr_index != last_layer_index:
                                 last_layer_index = curr_index
+                            time.sleep(monitor_interval)
                             continue
 
                         if trade_direction not in [0, 2]: # 0:双向 1:只买 2:只卖
@@ -552,11 +577,12 @@ class GridStrategy(BaseStrategy):
                                 peak_price = 0
                             if curr_index != last_layer_index:
                                 last_layer_index = curr_index
+                            time.sleep(monitor_interval)
                             continue
                         
                         # 安全检查
                         if not check_trade_safety('sell', current_price, curr_index):
-                             time.sleep(1) # 避免死循环空转
+                             time.sleep(monitor_interval) # 避免死循环空转
                              continue
 
                         # 计算交易量
@@ -585,20 +611,14 @@ class GridStrategy(BaseStrategy):
                                 if sell_triggered_by_fallback:
                                     waiting_for_fallback = False
                                     peak_price = 0
-                            # 卖出失败时
-                            elif allow_repeat_trade:
-                                # 如果允许重复交易，不更新 last_layer_index，允许下次重试
+                            elif not res:
                                 pass
-                            else:
-                                # 否则跳过该层级
-                                last_layer_index = curr_index
                         else:
                             self.log(f"任务({id})可卖持仓不足。需 {trade_vol}，有 {available}", "WARNING")
                             if sell_triggered_by_fallback:
                                 waiting_for_fallback = False
                                 peak_price = 0
-                            if not allow_repeat_trade:
-                                last_layer_index = curr_index 
+                            last_layer_index = curr_index 
                              
                     elif is_buy_signal:
                         # 价格下跌 -> 买入
@@ -608,16 +628,18 @@ class GridStrategy(BaseStrategy):
                         if deployment_mode == 'PARTITIONED' and curr_index > 0:
                             self.log(f"任务({id})分治模式限制：基准线之上不执行层级买入 (当前 {curr_index})", "DEBUG")
                             last_layer_index = curr_index
+                            time.sleep(monitor_interval)
                             continue
 
                         if trade_direction not in [0, 1]: # 0:双向 1:只买 2:只卖
                             # self.log(f"任务({id})触发买入信号但方向限制，跳过")
                             last_layer_index = curr_index
+                            time.sleep(monitor_interval)
                             continue
                             
                         # 安全检查
                         if not check_trade_safety('buy', current_price, curr_index):
-                             time.sleep(1)
+                             time.sleep(monitor_interval)
                              continue
 
                         # 计算交易量
@@ -632,7 +654,7 @@ class GridStrategy(BaseStrategy):
                         
                         # 持仓检查 (Max Hold)
                         pos = self.trader.get_position(stock_code)
-                        total_pos = pos.get('total', 0)
+                        total_pos = pos.get('total_quantity', 0)
                         
                         allow_buy = True
                         
@@ -671,22 +693,31 @@ class GridStrategy(BaseStrategy):
                         
                         if allow_buy:
                             reason = f"任务: {name}({id})\n原因: 下跌触发"
-                            res = self.trader.buy(stock_code, current_price, trade_vol, reason=reason)
-                            if res:
-                                self.log(f"任务({id})买入委托已发送：{res}")
-                                self._save_trade_record("buy", current_price, trade_vol, f"Grid Buy {curr_index}")
-                                self._update_task_position(stock_code)
-                                update_trade_state(current_price, curr_index)
-                            # 买入失败时
-                            elif allow_repeat_trade:
-                                # 如果允许重复交易，不更新 last_layer_index，允许下次重试
-                                pass
+                            balance = self.trader.get_balance()
+                            available_balance = balance.get('available_balance', 0)
+                            need_cash = trade_vol * current_price
+
+                            if available_balance < need_cash:
+                                self.log(f"任务({id})资金不足，跳过买入。需 {need_cash:.2f}，有 {available_balance:.2f}", "WARNING")
+                                if buy_triggered_by_rebound:
+                                    waiting_for_rebound = False
+                                    valley_price = 0
+                                last_layer_index = curr_index
                             else:
-                                # 否则跳过该层级
-                                last_layer_index = curr_index
+                                res = self.trader.buy(stock_code, current_price, trade_vol, reason=reason)
+                                if res:
+                                    self.log(f"任务({id})买入委托已发送：{res}")
+                                    self._save_trade_record("buy", current_price, trade_vol, f"Grid Buy {curr_index}")
+                                    self._update_task_position(stock_code)
+                                    update_trade_state(current_price, curr_index)
+                                    if buy_triggered_by_rebound:
+                                        waiting_for_rebound = False
+                                        valley_price = 0
                         else:
-                            if not allow_repeat_trade:
-                                last_layer_index = curr_index
+                            if buy_triggered_by_rebound:
+                                waiting_for_rebound = False
+                                valley_price = 0
+                            last_layer_index = curr_index
             
             except Exception as e:
                 self.log(f"任务({id})循环错误：{e}", "ERROR")
@@ -698,7 +729,7 @@ class GridStrategy(BaseStrategy):
     def _get_layer_index(self, price, base_price):
         """计算层级索引"""
         if price <= 0 or base_price <= 0 or self.log_layer_base == 0: return 0
-        return int(math.log(price / base_price) / self.log_layer_base)
+        return int(math.floor(math.log(price / base_price) / self.log_layer_base))
 
     def _stop_profit_sell(self, stock_code, price):
         pos = self.trader.get_position(stock_code)
@@ -809,36 +840,17 @@ class GridStrategy(BaseStrategy):
             pass
 
     def _is_trading_time(self):
-        """
-        检查当前是否为交易时间（周一到周五 9:25-11:30 或 13:00-15:00）
-        """
-        # 如果是回测模式或调试模式，可能需要忽略此检查
-        now = datetime.datetime.now()
-        
-        # 1. 检查周末
-        if now.weekday() > 4: # 0-4 is Mon-Fri, 5-6 is Sat-Sun
-            return False
-            
-        # 2. 检查时间段，转换为分钟数方便比较
-        current_minute = now.hour * 60 + now.minute
-        
-        # 9:15 = 9*60 + 15 = 555
-        # 9:25 = 9*60 + 25 = 565
-        # 11:30 = 11*60 + 30 = 690
-        # 13:00 = 13*60 = 780
-        # 15:00 = 15*60 = 900
-
-        # 交易时间（9:25-11:30）或（13:00-15:00）
-        if (565 <= current_minute <= 690) or (780 <= current_minute <= 900):
+        if getattr(self, 'ignore_trading_time', False):
             return True
-            
-        # 集合竞价（9:15-9:25）
-        if 555 <= current_minute < 565:
+        now = datetime.datetime.now()
+
+        if now.weekday() > 4:
             return False
 
-        # 收盘后（15:00）
-        if current_minute > 900:
-            return False
-            
-        # 其他时间 (盘前、午休)
-        return False
+        current = now.time()
+        morning_start = datetime.time(9, 25, 0)
+        morning_end = datetime.time(11, 30, 0)
+        afternoon_start = datetime.time(13, 0, 0)
+        afternoon_end = datetime.time(15, 0, 0)
+
+        return (morning_start <= current < morning_end) or (afternoon_start <= current < afternoon_end)

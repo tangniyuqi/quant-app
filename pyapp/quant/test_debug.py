@@ -1,13 +1,13 @@
 
 import unittest
 from unittest.mock import MagicMock, patch
-from pyapp.quant.strategies.ai_event import AIEventStrategy as EventDrivenAIStrategy
+from quant.strategies.event import EventStrategy as EventDrivenAIStrategy
 
 class TestFailure(unittest.TestCase):
     def test_init_fail_due_to_connection(self):
         print("\n--- Testing Init Failure due to Connection ---")
         # Mocking BaseStrategy to simulate connection failure
-        with patch('pyapp.quant.base.BaseStrategy.__init__') as mock_super_init:
+        with patch('quant.base.BaseStrategy.__init__') as mock_super_init:
             mock_super_init.side_effect = Exception("Connection Failed")
             
             try:
@@ -18,7 +18,7 @@ class TestFailure(unittest.TestCase):
     def test_init_fail_due_to_data_structure(self):
         print("\n--- Testing Init Failure due to Data Structure ---")
         # Mocking BaseStrategy to succeed, but data is bad
-        with patch('pyapp.quant.base.BaseStrategy.__init__') as mock_super_init:
+        with patch('quant.base.BaseStrategy.__init__') as mock_super_init:
             def side_effect(self, data, log_callback=None):
                 self.data = data
             mock_super_init.side_effect = side_effect

@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import json
-from pyapp.quant.strategies.event import EventStrategy
+from quant.strategies.event import EventStrategy
 
 class TestEventStrategy(unittest.TestCase):
     def setUp(self):
-        self.trader_patcher = patch('pyapp.quant.base.QuantTrader')
+        self.trader_patcher = patch('quant.base.QuantTrader')
         self.MockQuantTrader = self.trader_patcher.start()
         
         self.data = {
