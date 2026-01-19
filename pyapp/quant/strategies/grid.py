@@ -84,10 +84,12 @@ class GridStrategy(BaseStrategy):
         last_trade_time = 0      # 上次交易时间戳
         last_trade_price = 0     # 上次交易价格
         layer_repeat_counts = {}  # 各层级已交易次数 {index: count}
-         
+        
+        # 回落标志/峰值记录
         waiting_for_fallback = False
         peak_price = 0.0
         
+        # 反弹标志/谷值记录
         waiting_for_rebound = False
         valley_price = 0.0
 
@@ -124,17 +126,18 @@ class GridStrategy(BaseStrategy):
         lower_price = float(config.get('lowerPrice', 0))
         
         # 持仓限制
-        max_hold_type = int(config.get('maxHoldType', -1)) # -1:不限 0:任意 1:量 2:额 3:比例
-        max_hold = int(config.get('maxHold', 10000))
+        max_hold_type = int(config.get('maxHoldType', -2)) # -2:未定义(旧逻辑) -1:不限 0:任意 1:量 2:额 3:比例
+        max_hold_quantity = int(config.get('maxHoldQuantity', 10000))
         max_hold_amount = float(config.get('maxHoldAmount', 0))
         max_hold_ratio = float(config.get('maxHoldRatio', 0))
         
-        # 止盈止损
+        # 止盈
         tp_type = int(config.get('takeProfitType', -1)) # -1:不限 0:任意 1:比例 2:价格
         tp_ratio = float(config.get('takeProfitRatio', 0))
         tp_price = float(config.get('takeProfitPrice', 0))
         
-        sl_type = int(config.get('stopLossType', -1))
+        # 止损
+        sl_type = int(config.get('stopLossType', -1)) # -1:不限 0:任意 1:比例 2:价格
         sl_ratio = float(config.get('stopLossRatio', 0))
         sl_price = float(config.get('stopLossPrice', 0))
 
@@ -659,15 +662,38 @@ class GridStrategy(BaseStrategy):
                         allow_buy = True
                         
                         # Max Hold Check
-                        if max_hold_type == 0: # 任意满足
-                             if (max_hold > 0 and total_pos + trade_vol > max_hold) or \
-                                (max_hold_amount > 0 and (total_pos + trade_vol) * current_price > max_hold_amount):
+                        if max_hold_type == -1: # 不限制
+                             pass
+                        elif max_hold_type == 0: # 任意满足
+                             is_limit_reached = False
+                             
+                             # 1. Check Quantity
+                             if max_hold_quantity > 0 and total_pos + trade_vol > max_hold_quantity:
+                                 is_limit_reached = True
+                                 
+                             # 2. Check Amount
+                             elif max_hold_amount > 0 and (total_pos + trade_vol) * current_price > max_hold_amount:
+                                 is_limit_reached = True
+                                 
+                             # 3. Check Ratio
+                             elif max_hold_ratio > 0:
+                                 balance = self.trader.get_balance()
+                                 total_asset = balance.get('total_asset', 0)
+                                 if total_asset > 0:
+                                     current_hold_value = total_pos * current_price
+                                     new_hold_value = trade_vol * current_price
+                                     total_hold_value = current_hold_value + new_hold_value
+                                     new_ratio = (total_hold_value / total_asset) * 100
+                                     if new_ratio > max_hold_ratio:
+                                         is_limit_reached = True
+
+                             if is_limit_reached:
                                  allow_buy = False
-                                 self.log(f"任务({id})超过最大持仓限制(任意)", "WARNING")
+                                 self.log(f"任务({id})超过最大持仓限制(任意: 量/额/率)", "WARNING")
                         elif max_hold_type == 1: # 按量
-                             if max_hold > 0 and total_pos + trade_vol > max_hold:
+                             if max_hold_quantity > 0 and total_pos + trade_vol > max_hold_quantity:
                                  allow_buy = False
-                                 self.log(f"任务({id})超过最大持仓量 {max_hold}", "WARNING")
+                                 self.log(f"任务({id})超过最大持仓量 {max_hold_quantity}", "WARNING")
                         elif max_hold_type == 2: # 按额
                              if max_hold_amount > 0 and (total_pos + trade_vol) * current_price > max_hold_amount:
                                  allow_buy = False
@@ -682,14 +708,6 @@ class GridStrategy(BaseStrategy):
                                     if new_ratio > max_hold_ratio:
                                         allow_buy = False
                                         self.log(f"任务({id})超过最大持仓比例 {max_hold_ratio}% (当前预测 {new_ratio:.2f}%)", "WARNING")
-                        else: # 兼容旧逻辑
-                             # 检查最大持仓
-                             current_hold_amount = total_pos * current_price
-                             new_amount = trade_vol * current_price
-                             if (max_hold > 0 and total_pos + trade_vol > max_hold) or \
-                                (max_hold_amount > 0 and current_hold_amount + new_amount > max_hold_amount):
-                                 allow_buy = False
-                                 self.log(f"任务({id})达到最大持仓限制", "WARNING")
                         
                         if allow_buy:
                             reason = f"任务: {name}({id})\n原因: 下跌触发"
