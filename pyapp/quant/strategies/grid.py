@@ -30,20 +30,21 @@ class GridStrategy(BaseStrategy):
         validity_period = config.get('validityPeriod')
         if validity_period:
             try:
-                # validityPeriod 可能是 YYYY-MM-DD 字符串
                 if isinstance(validity_period, str):
                     dt = datetime.datetime.strptime(validity_period[:10], "%Y-%m-%d")
-                    # 设置为当天收盘时间 (15:00:00)
                     self.expiration_time = dt.replace(hour=15, minute=0, second=0, microsecond=0)
             except Exception as e:
                 self.log(f"配置错误: 无效的有效期格式 {validity_period}: {e}", "ERROR")
         
         self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
+        self.enable_real_trade = bool(config.get('enableRealTrade', True))
 
     def run(self):
         id = self.data.get('id', 0)
         name = self.data.get('name', 'Unknown')
         self.log(f"正在启动任务({id})：{name}...") 
+        mode_str = "实盘交易" if self.enable_real_trade else "模拟演示 (仅日志)"
+        self.log(f"当前运行模式: {mode_str}")
         
         # 1. 解析配置
         config = self.data.get('task', {}).get('config', {})
@@ -234,7 +235,7 @@ class GridStrategy(BaseStrategy):
                     self.log(f"任务({id})启动补卖: {available} {align_vol} (索引 {last_layer_index})")
 
                     if available >= align_vol:
-                        res = self.trader.sell(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补卖")
+                        res = self._safe_sell(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补卖")
                         if res:
                             self._save_trade_record("sell", current_price, align_vol, f"Auto Align {last_layer_index}")
                             self._update_task_position(stock_code)
@@ -254,7 +255,7 @@ class GridStrategy(BaseStrategy):
                     need_cash = align_vol * current_price
                     
                     if available_balance >= need_cash:
-                        res = self.trader.buy(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补买")
+                        res = self._safe_buy(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补买")
                         if res:
                             self._save_trade_record("buy", current_price, align_vol, f"Auto Align {last_layer_index}")
                             self._update_task_position(stock_code)
@@ -299,7 +300,7 @@ class GridStrategy(BaseStrategy):
                     
                     if available_balance >= need_cash:
                         reason = f"任务: {name}({id})\n原因: 自动建仓"
-                        res = self.trader.buy(stock_code, current_price, open_vol, reason=reason)
+                        res = self._safe_buy(stock_code, current_price, open_vol, reason=reason)
                         if res:
                             self.log(f"任务({id})自动建仓委托已发送：{res}")
                             self._save_trade_record("buy", current_price, open_vol, "Auto Open")
@@ -755,7 +756,7 @@ class GridStrategy(BaseStrategy):
         if avail > 0:
             name = self.data.get('name', 'Unknown')
             reason = f"任务: {name}({self.data.get('id')})\n原因: 触发止盈"
-            res = self.trader.sell(stock_code, price, avail, reason=reason)
+            res = self._safe_sell(stock_code, price, avail, reason=reason)
             self._save_trade_record("sell", price, avail, "Stop Profit")
 
     def _stop_loss_sell(self, stock_code, price):
@@ -764,8 +765,20 @@ class GridStrategy(BaseStrategy):
         if avail > 0:
             name = self.data.get('name', 'Unknown')
             reason = f"任务: {name}({self.data.get('id')})\n原因: 触发止损"
-            res = self.trader.sell(stock_code, price, avail, reason=reason)
+            res = self._safe_sell(stock_code, price, avail, reason=reason)
             self._save_trade_record("sell", price, avail, "Stop Loss")
+
+    def _safe_buy(self, stock_code, price, quantity, reason):
+        if not self.enable_real_trade:
+            self.log(f"【模拟交易】触发买入：{stock_code}, 价格 {price}, 数量 {quantity}\n原因: {reason}", "WARNING")
+            return {"id": "sim_buy", "status": "simulated"}
+        return self.trader.buy(stock_code, price, quantity, reason=reason)
+
+    def _safe_sell(self, stock_code, price, quantity, reason):
+        if not self.enable_real_trade:
+            self.log(f"【模拟交易】触发卖出：{stock_code}, 价格 {price}, 数量 {quantity}\n原因: {reason}", "WARNING")
+            return {"id": "sim_sell", "status": "simulated"}
+        return self.trader.sell(stock_code, price, quantity, reason=reason)
 
     def _update_task_position(self, stock_code):
         try:

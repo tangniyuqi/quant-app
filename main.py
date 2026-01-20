@@ -50,7 +50,7 @@ def WebViewApp(ifDev=False, ifCef=False):
     if Config.devEnv:
         # 开发环境
         MAIN_DIR = f'http://localhost:{Config.devPort}/'
-        template = os.path.join(MAIN_DIR, "#/quant")    # 设置页面，指向远程
+        template = os.path.join(MAIN_DIR, "#/quant")    # 设置页面，指向本地
     else:
         # 生产环境
         # MAIN_DIR = os.path.join(".", "web")
