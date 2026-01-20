@@ -522,14 +522,14 @@ class GridStrategy(BaseStrategy):
                             if current_price > peak_price:
                                 peak_price = current_price
 
-                            if curr_index <= last_layer_index:
-                                self.log(f"任务({id})价格回落至原层级线({curr_index})，取消回落卖出监控。")
-                                waiting_for_fallback = False
-                                peak_price = 0
-                            elif current_price <= peak_price * (1 - fallback_ratio):
+                            if current_price <= peak_price * (1 - fallback_ratio):
                                 self.log(f"任务({id})满足回落卖出条件：峰值 {peak_price} -> 当前 {current_price}")
                                 is_sell_signal = True
                                 sell_triggered_by_fallback = True
+                            elif curr_index <= last_layer_index:
+                                self.log(f"任务({id})价格回落至原层级线({curr_index})，未满足回落比例，取消回落卖出监控。")
+                                waiting_for_fallback = False
+                                peak_price = 0
                         elif raw_sell_signal:
                             waiting_for_fallback = True
                             peak_price = current_price
@@ -544,14 +544,14 @@ class GridStrategy(BaseStrategy):
                             if valley_price == 0 or current_price < valley_price:
                                 valley_price = current_price
                             
-                            if curr_index >= last_layer_index:
-                                self.log(f"任务({id})价格反弹至原层级线({curr_index})，取消反弹买入监控。")
-                                waiting_for_rebound = False
-                                valley_price = 0
-                            elif current_price >= valley_price * (1 + rebound_ratio):
+                            if current_price >= valley_price * (1 + rebound_ratio):
                                 self.log(f"任务({id})满足反弹买入条件：谷值 {valley_price} -> 当前 {current_price}")
                                 is_buy_signal = True
                                 buy_triggered_by_rebound = True
+                            elif curr_index >= last_layer_index:
+                                self.log(f"任务({id})价格反弹至原层级线({curr_index})，未满足反弹比例，取消反弹买入监控。")
+                                waiting_for_rebound = False
+                                valley_price = 0
                         elif raw_buy_signal:
                             waiting_for_rebound = True
                             valley_price = current_price
