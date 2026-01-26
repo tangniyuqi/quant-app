@@ -9,11 +9,59 @@ usage: 在Javascript中调用window.pywebview.api.<methodname>(<parameters>)
 '''
 
 import json
+import os
+import sys
 from api.system import System
 from pyapp.quant.manager import TaskManager
+from pyapp.quant.service_manager import ServiceManager
 
 class QuantAPI:
     '''量化交易API'''
+    
+    def quant_startClient(self, data):
+        '''启动客户端程序'''
+        try:
+            server = json.loads(data)
+            client_path = server.get('clientPath')
+            port = int(server.get('port', 8888))
+            ip = server.get('ip', '0.0.0.0')
+
+            code, msg, data = ServiceManager.start_service(client_path, ip, port)
+            
+            result = {'code': code, 'msg': msg}
+            if data:
+                result['data'] = data
+            return result
+
+        except Exception as e:
+            return {'code': 500, 'msg': f'启动失败: {str(e)}'}
+
+    def quant_stopClient(self, data):
+        '''停止客户端程序'''
+        try:
+            server = json.loads(data)
+            client_path = server.get('clientPath')
+            port = int(server.get('port', 8888))
+
+            code, msg = ServiceManager.stop_service(client_path, port)
+            return {'code': code, 'msg': msg}
+
+        except Exception as e:
+            return {'code': 500, 'msg': f'停止异常: {str(e)}'}
+
+    def quant_checkClientStatus(self, data):
+        '''检查客户端程序状态'''
+        try:
+            server = json.loads(data)
+            client_path = server.get('clientPath')
+            port = int(server.get('port', 8888))
+
+            code, msg, data = ServiceManager.check_service_status(client_path, port)
+            return {'code': code, 'msg': msg, 'data': data}
+
+        except Exception as e:
+            # If checking status fails, assume not running or error
+            return {'code': 200, 'data': {'running': False}, 'msg': str(e)}
 
     def quant_startTask(self, data):
         '''启动任务'''

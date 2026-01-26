@@ -1,5 +1,7 @@
 pywebview==6.1
 pyinstaller==6.17.0
+fastapi
+uvicorn
 httpx==0.28.1
 requests==2.32.5
 easyquotation==0.7.7
@@ -17,3 +19,5 @@ cryptography==46.0.3
 
 # Pyarmor 运行时支持
 # pyarmor.cli.core==8.1.0
+
+psutil
