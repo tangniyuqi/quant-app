@@ -14,12 +14,13 @@ class ServiceManager:
     _internal_servers = {}
     
     @classmethod
-    def start_service(cls, client_path, ip='0.0.0.0', port=8888):
+    def start_service(cls, client_type='universal_client', client_path='', port=8888, token=''):
         """
         启动服务
+        :param client_type: 客户端类型
         :param client_path: 客户端路径 (仅支持外部客户端路径，如同花顺exe路径)
-        :param ip: 绑定IP
         :param port: 绑定端口
+        :param token: 验证 Token
         :return: (code, msg, data)
         """
         try:
@@ -32,9 +33,9 @@ class ServiceManager:
                 else:
                     del cls._internal_servers[port]
            
-            app = create_proxy_app(client_path)
+            app = create_proxy_app(client_type, client_path, token)
             log_prefix = f'Proxy Server ({client_path})'
-
+            ip = '0.0.0.0'
             config = uvicorn.Config(app, host=ip, port=port, log_level="info")
             server = uvicorn.Server(config)
             cls._internal_servers[port] = server

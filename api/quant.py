@@ -19,20 +19,22 @@ class QuantAPI:
     '''量化交易API'''
     
     def quant_startClient(self, data):
-        '''启动客户端程序'''
+        """
+        启动客户端服务
+        :param data: JSON string containing server config
+        """
         try:
             server = json.loads(data)
-            client_path = server.get('clientPath')
+            client_type = server.get('clientType', 'universal_client')
+            client_path = server.get('clientPath', '')
             port = int(server.get('port', 8888))
-            ip = server.get('ip', '0.0.0.0')
-
-            code, msg, data = ServiceManager.start_service(client_path, ip, port)
+            token = server.get('token', '')
             
+            code, msg, data = ServiceManager.start_service(client_type, client_path, port, token)
             result = {'code': code, 'msg': msg}
             if data:
                 result['data'] = data
             return result
-
         except Exception as e:
             return {'code': 500, 'msg': f'启动失败: {str(e)}'}
 

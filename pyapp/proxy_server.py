@@ -1,7 +1,7 @@
 import os
 import threading
 import platform
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends, Query
 from pyapp.server import OrderRequest
 
 class MockTrader:
@@ -20,32 +20,35 @@ class MockTrader:
     def sell(self, security, price, amount):
         return {'message': f'Mock sell {security} price={price} amount={amount}'}
 
-def create_proxy_app(client_path: str):
+def create_proxy_app(client_type: str = 'universal_client', client_path: str = '', token: str = ''):
     """
-    创建代理模式的 FastAPI 应用
-    直接连接指定的交易客户端，不依赖 TaskManager
+    创建代理模式的 FastAPI 应用 直接连接指定的交易客户端，不依赖 TaskManager
+    :param client_type: 支持的客户端类型 (如 'universal_client', 'ths', 'tdx', 'xq' 等)
+    :param client_path: 客户端安装路径
+    :param token: 验证 Token
     """
     proxy_app = FastAPI(title="Quant Proxy Server", version="1.0")
     
     # 存储 trader 状态
     # 使用 state 存储，避免全局变量污染
     proxy_app.state.user = None
+    proxy_app.state.client_type = client_type
     proxy_app.state.client_path = client_path
+    proxy_app.state.token = token
     
     # 全局锁，防止多线程并发操作 GUI
-    trader_lock = threading.Lock()
+    server_lock = threading.Lock()
 
-    def resolve_client_path(path: str) -> str:
+    def resolve_client_path(path: str, client_type: str) -> str:
         if not path:
             return path
         if os.path.isdir(path):
-            candidates = [
-                "xiadan.exe",
-                "hexin.exe",
-                "Hexin.exe",
-                "THS.exe",
-                "ths.exe",
-            ]
+            candidates = []
+            if client_type in ['ths', 'universal_client']:
+                candidates.extend(["xiadan.exe", "hexin.exe", "ths.exe"])
+            if client_type in ['tdx', 'universal_client']:
+                candidates.extend(["TdxW.exe"])
+            
             for name in candidates:
                 p = os.path.join(path, name)
                 if os.path.exists(p):
@@ -63,55 +66,65 @@ def create_proxy_app(client_path: str):
         try:
             import easytrader
             from easytrader import grid_strategies
-            
-            # 使用通用客户端连接同花顺
-            user = easytrader.use('universal_client')
-            # 设置输入策略为 Copy (复制粘贴)，通常比模拟按键更稳定
-            user.grid_strategy = grid_strategies.Copy
-            
-            resolved_path = resolve_client_path(proxy_app.state.client_path)
-            proxy_app.state.client_path = resolved_path
-            user.connect(resolved_path)
-            
-            # 启用编辑器的 Type Keys 模式（如果需要）
-            if hasattr(user, 'enable_type_keys_for_editor'):
-                user.enable_type_keys_for_editor()
-                
+            from . import client_patch
+
+            user = easytrader.use(proxy_app.state.client_type)
+            user.grid_strategy = grid_strategies.Copy, proxy_app.state.client_type
+            proxy_app.state.client_path = resolve_client_path(proxy_app.state.client_path)
+            user.connect(proxy_app.state.client_path)
+            user.enable_type_keys_for_editor()
+            # user.grid_strategy = grid_strategies.Xls
+            # user.grid_strategy_instance.tmp_folder = r'C:\Temp'
+            # user.return_response = True # 是否返回成交回报
+            # user.prepare("同花顺安装路径", username="账户", password="密码") # 若需自动登录
+
             proxy_app.state.user = user
             print(f"Successfully connected to client: {proxy_app.state.client_path}")
         except Exception as e:
             print(f"Failed to connect to client: {e}")
             # 不抛出异常，允许服务启动，但在调用接口时报错
 
-    def get_trader():
+    def get_user():
         if not proxy_app.state.user:
             raise HTTPException(status_code=500, detail="Trader not connected or initialization failed")
         return proxy_app.state.user
 
-    @proxy_app.get("/balance")
+    async def verify_token(x_token: str = Header(None), token: str = Query(None)):
+        """
+        验证请求头中的 X-Token 或 URL 参数中的 token
+        """
+        if not proxy_app.state.token:
+            return
+        
+        input_token = x_token or token
+        
+        if input_token != proxy_app.state.token:
+            raise HTTPException(status_code=401, detail="Invalid Token")
+
+    @proxy_app.get("/balance", dependencies=[Depends(verify_token)])
     def get_balance():
         """获取账户资金"""
-        with trader_lock:
-            user = get_trader()
+        with server_lock:
+            user = get_user()
             try:
                 return {"code": 200, "data": user.balance, "msg": "success"}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-    @proxy_app.get("/position")
+    @proxy_app.get("/position", dependencies=[Depends(verify_token)])
     def get_position():
         """获取账户持仓"""
-        with trader_lock:
+        with server_lock:
             user = get_trader()
             try:
                 return {"code": 200, "data": user.position, "msg": "success"}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-    @proxy_app.post("/buy")
+    @proxy_app.post("/buy", dependencies=[Depends(verify_token)])
     def buy(order: OrderRequest):
         """买入下单"""
-        with trader_lock:
+        with server_lock:
             user = get_trader()
             try:
                 data = user.buy(
@@ -119,14 +132,14 @@ def create_proxy_app(client_path: str):
                     price=order.price,
                     amount=order.amount
                 )
-                return {"code": 200, "data": data, "msg": "下单请求已提交"}
+                return {"code": 200, "data": data, "msg": "success"}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"下单失败：{str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
 
-    @proxy_app.post("/sell")
+    @proxy_app.post("/sell", dependencies=[Depends(verify_token)])
     def sell(order: OrderRequest):
         """卖出下单"""
-        with trader_lock:
+        with server_lock:
             user = get_trader()
             try:
                 data = user.sell(
@@ -134,8 +147,8 @@ def create_proxy_app(client_path: str):
                     price=order.price,
                     amount=order.amount
                 )
-                return {"code": 200, "data": data, "msg": "下单请求已提交"}
+                return {"code": 200, "data": data, "msg": "success"}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"下单失败：{str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
 
     return proxy_app
