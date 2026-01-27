@@ -39,10 +39,10 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
     # 全局锁，防止多线程并发操作 GUI
     server_lock = threading.Lock()
 
-    def resolve_client_path(path: str, client_type: str) -> str:
-        if not path:
-            return path
-        if os.path.isdir(path):
+    def resolve_client_path(client_type: str, client_path: str) -> str:
+        if not client_path:
+            return client_path
+        if os.path.isdir(client_path):
             candidates = []
             if client_type in ['ths', 'universal_client']:
                 candidates.extend(["xiadan.exe", "hexin.exe", "ths.exe"])
@@ -50,10 +50,10 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
                 candidates.extend(["TdxW.exe"])
             
             for name in candidates:
-                p = os.path.join(path, name)
+                p = os.path.join(client_path, name)
                 if os.path.exists(p):
                     return p
-        return path
+        return client_path
 
     @proxy_app.on_event("startup")
     async def startup_event():
@@ -69,8 +69,8 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
             from . import client_patch
 
             user = easytrader.use(proxy_app.state.client_type)
-            user.grid_strategy = grid_strategies.Copy, proxy_app.state.client_type
-            proxy_app.state.client_path = resolve_client_path(proxy_app.state.client_path)
+            user.grid_strategy = grid_strategies.Copy
+            proxy_app.state.client_path = resolve_client_path(proxy_app.state.client_type, proxy_app.state.client_path)
             user.connect(proxy_app.state.client_path)
             user.enable_type_keys_for_editor()
             # user.grid_strategy = grid_strategies.Xls
