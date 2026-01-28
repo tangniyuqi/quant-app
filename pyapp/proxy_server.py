@@ -35,6 +35,7 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
     proxy_app.state.client_type = client_type
     proxy_app.state.client_path = client_path
     proxy_app.state.token = token
+    proxy_app.state.startup_error = None
     
     # 全局锁，防止多线程并发操作 GUI
     server_lock = threading.Lock()
@@ -72,7 +73,7 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
             user.grid_strategy = grid_strategies.Copy
             proxy_app.state.client_path = resolve_client_path(proxy_app.state.client_type, proxy_app.state.client_path)
             user.connect(proxy_app.state.client_path)
-            user.enable_type_keys_for_editor()
+            # user.enable_type_keys_for_editor()
             # user.grid_strategy = grid_strategies.Xls
             # user.grid_strategy_instance.tmp_folder = r'C:\Temp'
             # user.return_response = True # 是否返回成交回报
@@ -82,11 +83,13 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
             print(f"Successfully connected to client: {proxy_app.state.client_path}")
         except Exception as e:
             print(f"Failed to connect to client: {e}")
+            proxy_app.state.startup_error = str(e)
             # 不抛出异常，允许服务启动，但在调用接口时报错
 
     def get_user():
         if not proxy_app.state.user:
-            raise HTTPException(status_code=500, detail="Trader not connected or initialization failed")
+            error_msg = getattr(proxy_app.state, "startup_error", "Unknown initialization error")
+            raise HTTPException(status_code=500, detail=f"Trader not connected. Error: {error_msg}")
         return proxy_app.state.user
 
     async def verify_token(x_token: str = Header(None), token: str = Query(None)):
@@ -115,7 +118,7 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
     def get_position():
         """获取账户持仓"""
         with server_lock:
-            user = get_trader()
+            user = get_user()
             try:
                 return {"code": 200, "data": user.position, "msg": "success"}
             except Exception as e:
@@ -125,7 +128,7 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
     def buy(order: OrderRequest):
         """买入下单"""
         with server_lock:
-            user = get_trader()
+            user = get_user()
             try:
                 data = user.buy(
                     security=order.security,
@@ -140,7 +143,7 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
     def sell(order: OrderRequest):
         """卖出下单"""
         with server_lock:
-            user = get_trader()
+            user = get_user()
             try:
                 data = user.sell(
                     security=order.security,

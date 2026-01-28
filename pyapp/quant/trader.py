@@ -360,7 +360,7 @@ class QuantTrader:
         try:
             # 使用独立的客户端实例以避免阻塞主交易线程
             user = self._create_client()
-            print(f'[{time.strftime('%H:%M:%S')}] 资产监控线程已启动 (Account {account_id})')
+            print(f"[{time.strftime('%H:%M:%S')}] 资产监控线程已启动 (Account {account_id})")
             
             while not stop_event.is_set():
                 self._update_assets(account_id, user)
@@ -395,7 +395,7 @@ class QuantTrader:
                 }
                 response = requests.put(url, json=data, headers=headers, timeout=5)
                 if response.status_code != 200:
-                    print(f'[{time.strftime('%H:%M:%S')}] 资产上报失败: {response.status_code} {response.text}')
+                    print(f"[{time.strftime('%H:%M:%S')}] 资产上报失败: {response.status_code} {response.text}")
                 else:
                     # 成功上报后，通知前端刷新
                     if self.log_callback:
@@ -477,7 +477,7 @@ class QuantTrader:
                             'tag': 'note',
                             'elements': [
                                 {
-                                    'content': f'时间: {time.strftime('%Y-%m-%d %H:%M:%S')}',
+                                    'content': f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}",
                                     'tag': 'plain_text'
                                 }
                             ]

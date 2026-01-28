@@ -16,7 +16,7 @@ from pyapp.quant.manager import TaskManager
 from pyapp.quant.service_manager import ServiceManager
 
 class QuantAPI:
-    '''量化交易API'''
+   '''量化交易API'''
     
     def quant_startClient(self, data):
         """
@@ -39,10 +39,10 @@ class QuantAPI:
             return {'code': 500, 'msg': f'启动失败: {str(e)}'}
 
     def quant_stopClient(self, data):
-        '''停止客户端程序'''
+       '''停止客户端程序'''
         try:
             server = json.loads(data)
-            client_path = server.get('clientPath')
+            client_path = server.get('clientPath', '')
             port = int(server.get('port', 8888))
 
             code, msg = ServiceManager.stop_service(client_path, port)
@@ -52,10 +52,10 @@ class QuantAPI:
             return {'code': 500, 'msg': f'停止异常: {str(e)}'}
 
     def quant_checkClientStatus(self, data):
-        '''检查客户端程序状态'''
+       '''检查客户端程序状态'''
         try:
             server = json.loads(data)
-            client_path = server.get('clientPath')
+            client_path = server.get('clientPath', '')
             port = int(server.get('port', 8888))
 
             code, msg, data = ServiceManager.check_service_status(client_path, port)
@@ -66,7 +66,7 @@ class QuantAPI:
             return {'code': 200, 'data': {'running': False}, 'msg': str(e)}
 
     def quant_startTask(self, data):
-        '''启动任务'''
+       '''启动任务'''
         def log_callback(level, module, message):
             if System._window:
                 js = f"window.quant_addConsoleLog({json.dumps(level)}, {json.dumps(module)}, {json.dumps(message)})"
@@ -77,19 +77,19 @@ class QuantAPI:
         return {'success': success, 'msg': msg}
 
     def quant_stopTask(self, task_id):
-        '''停止任务'''
+       '''停止任务'''
         manager = TaskManager()
         success, msg = manager.stop_task(task_id)
         return {'success': success, 'msg': msg}
 
     def quant_getRunningTasks(self):
-        '''获取运行中的任务ID列表'''
+       '''获取运行中的任务ID列表'''
         manager = TaskManager()
         ids = manager.get_running_tasks()   
         return {'success': True, 'data': ids}
 
     def quant_refreshAccount(self, data):
-        '''刷新账户资金'''
+       '''刷新账户资金'''
         try:
             manager = TaskManager()
             success, msg = manager.refresh_account(data)

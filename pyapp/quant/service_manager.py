@@ -24,27 +24,33 @@ class ServiceManager:
         :return: (code, msg, data)
         """
         try:
+            client_path = client_path or ''
             if not client_path:
                 return 400, '客户端路径不能为空', None
 
             if port in cls._internal_servers:
-                if cls._internal_servers[port].started:
+                entry = cls._internal_servers[port]
+                server_instance = entry["server"]
+                thread_instance = entry.get("thread")
+                if server_instance.started and (not thread_instance or thread_instance.is_alive()):
                     return 200, '服务已在运行 (Internal)', {'running': True}
+                if thread_instance and thread_instance.is_alive():
+                    return 200, '服务正在启动 (Internal)', {'running': True, 'starting': True}
                 else:
                     del cls._internal_servers[port]
            
             app = create_proxy_app(client_type, client_path, token)
-            log_prefix = f'Proxy Server ({client_path})'
+            log_prefix = f'Proxy Server ({client_path or "mock"})'
             ip = '0.0.0.0'
             config = uvicorn.Config(app, host=ip, port=port, log_level="info")
             server = uvicorn.Server(config)
-            cls._internal_servers[port] = server
             
             def run_server():
                 print(f"[{log_prefix}] Starting on {ip}:{port}...")
                 server.run()
             
             t = threading.Thread(target=run_server, daemon=True)
+            cls._internal_servers[port] = {"server": server, "thread": t}
             t.start()
             
             return 200, '服务启动成功', {'running': True}
@@ -63,8 +69,18 @@ class ServiceManager:
         try:
             # 1. 尝试停止内部服务
             if port in cls._internal_servers:
-                server_instance = cls._internal_servers[port]
+                entry = cls._internal_servers[port]
+                server_instance = entry["server"]
+                thread_instance = entry.get("thread")
                 server_instance.should_exit = True
+                
+                # 尝试等待线程结束，释放端口
+                if thread_instance and thread_instance.is_alive():
+                    # 给一点时间让 uvicorn 优雅关闭
+                    thread_instance.join(timeout=2.0)
+                
+                # 无论是否成功 join，都从管理列表移除
+                # 如果没完全关闭，再次启动时 uvicorn 会报错端口占用
                 del cls._internal_servers[port]
                 return 200, '服务已停止'
             
@@ -83,11 +99,14 @@ class ServiceManager:
         try:
             # 1. 检查内部服务状态
             if port in cls._internal_servers:
-                server_instance = cls._internal_servers[port]
-                if server_instance.started:
+                entry = cls._internal_servers[port]
+                server_instance = entry["server"]
+                thread_instance = entry.get("thread")
+                if server_instance.started and (not thread_instance or thread_instance.is_alive()):
                     return 200, 'success', {'running': True}
-                else:
-                    del cls._internal_servers[port]
+                if thread_instance and thread_instance.is_alive():
+                    return 200, 'success', {'running': True, 'starting': True}
+                del cls._internal_servers[port]
 
             return 200, 'success', {'running': False}
         except Exception as e:
