@@ -1,5 +1,5 @@
 # --- Core System & GUI ---
-pywebview==6.17.0
+pywebview==6.1
 psutil
 
 # --- Data Science & Math ---
