@@ -44,6 +44,7 @@ def specFirstPart():
 import os
 
 import PyInstaller.config
+from PyInstaller.utils.hooks import copy_metadata
 
 # 存放最终打包成app的相对路径
 buildPath = '{buildPath}'
@@ -64,11 +65,18 @@ appName = '{appName}'
 # 版本号
 version = '{version}'
 
+extra_datas = []
+for _pkg in ['pytz']:
+    try:
+        extra_datas += copy_metadata(_pkg)
+    except Exception:
+        pass
+
 
 a = Analysis(['../../main.py'],
             pathex=[],
             binaries=[{addDll}],
-            datas=[{addModules}],
+            datas=[{addModules}] + extra_datas,
             hiddenimports=[],
             hookspath=[],
             hooksconfig={{}},
