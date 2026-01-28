@@ -1,20 +1,39 @@
-pywebview==6.1
-pyinstaller==6.17.0
+# --- Core System & GUI ---
+pywebview==6.17.0
+psutil
+
+# --- Data Science & Math ---
 # 锁定 numpy < 2.0.0 以避免 Pandas ABI 兼容性问题 (Error: _pandas_datetime_CAPI)
 numpy<2.0.0
 pandas>=1.5.3,<2.3.0
+
+# --- Network & Web API ---
 fastapi
 uvicorn
 httpx==0.28.1
 requests==2.32.5
+
+# --- Quant Finance ---
 easyquotation==0.7.7
 easytrader==0.23.7
 tushare==1.4.24
-dmgbuild==1.6.5; sys_platform == 'darwin'
-pygobject==3.48.2; sys_platform == 'linux'
-# 数据库 - json
+
+# --- Database & Security ---
 tinydb==4.8.2
 cryptography==46.0.3
+
+# --- OCR ---
+pytesseract
+
+# --- Build & Packaging ---
+pyinstaller==6.17.0
+
+# --- Platform Specific ---
+dmgbuild==1.6.5; sys_platform == 'darwin'
+pygobject==3.48.2; sys_platform == 'linux'
+pywin32; sys_platform == 'win32'  # 包含 win32api
+
+# --- Optional / Comments ---
 # 数据库 - sql
 # tinyaes==1.1.0
 # sqlalchemy==2.0.7
@@ -22,5 +41,3 @@ cryptography==46.0.3
 
 # Pyarmor 运行时支持
 # pyarmor.cli.core==8.1.0
-
-psutil
