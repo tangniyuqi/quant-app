@@ -1,5 +1,8 @@
 pywebview==6.1
 pyinstaller==6.17.0
+# 锁定 numpy < 2.0.0 以避免 Pandas ABI 兼容性问题 (Error: _pandas_datetime_CAPI)
+numpy<2.0.0
+pandas>=1.5.3,<2.3.0
 fastapi
 uvicorn
 httpx==0.28.1
