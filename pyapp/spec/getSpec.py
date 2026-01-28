@@ -32,8 +32,6 @@ logoExt = 'icns' if ifMac else 'png' if ifLinux else 'ico'
 addDll = ''
 # 添加文件夹到打包中
 addModules = "('../../gui/dist', 'web'), ('../../static', 'static')"
-# if os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'pyarmor_runtime_000000')):
-#     addModules += ", ('../../pyarmor_runtime_000000', 'pyarmor_runtime_000000')"
 
 
 # spec配置文件 前半部分通用格式
@@ -44,7 +42,6 @@ def specFirstPart():
 import os
 
 import PyInstaller.config
-from PyInstaller.utils.hooks import copy_metadata, collect_all, collect_submodules, collect_dynamic_libs
 
 # 存放最终打包成app的相对路径
 buildPath = '{buildPath}'
@@ -65,63 +62,12 @@ appName = '{appName}'
 # 版本号
 version = '{version}'
 
-extra_datas = []
-extra_binaries = []
-extra_hiddenimports = []
-
-def _extend_unique(dst, items):
-    s = set(dst)
-    for x in items:
-        if x in s:
-            continue
-        dst.append(x)
-        s.add(x)
-
-for _pkg in ['pytz', 'pandas', 'numpy']:
-    try:
-        _extend_unique(extra_datas, copy_metadata(_pkg))
-    except Exception:
-        pass
-
-for _pkg in ['pandas', 'numpy']:
-    try:
-        _datas, _binaries, _hiddenimports = collect_all(_pkg)
-        _extend_unique(extra_datas, _datas)
-        _extend_unique(extra_binaries, _binaries)
-        _extend_unique(extra_hiddenimports, _hiddenimports)
-    except Exception:
-        pass
-
-# 显式添加 pandas 核心依赖的隐藏导入
-for _m in [
-    'pandas',
-    'pandas._libs',
-    'pandas._libs.tslibs',
-    'pandas._libs.tslibs.np_datetime',
-    'pandas._libs.tslibs.timedeltas',
-    'pandas._libs.tslibs.nattype',
-    'pandas._libs.tslibs.timezones',
-    'pandas._libs.pandas_datetime',
-]:
-    if _m not in extra_hiddenimports:
-        extra_hiddenimports.append(_m)
-
-try:
-    _extend_unique(extra_hiddenimports, collect_submodules('pandas'))
-except Exception:
-    pass
-
-try:
-    _extend_unique(extra_binaries, collect_dynamic_libs('pandas'))
-except Exception:
-    pass
-
 
 a = Analysis(['../../main.py'],
             pathex=[],
-            binaries=[{addDll}] + extra_binaries,
-            datas=[{addModules}] + extra_datas,
-            hiddenimports=extra_hiddenimports,
+            binaries=[{addDll}],
+            datas=[{addModules}],
+            hiddenimports=[],
             hookspath=[],
             hooksconfig={{}},
             runtime_hooks=[],
@@ -146,7 +92,6 @@ exe = EXE(pyz,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
-        upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
         console={console},
         disable_windowed_traceback=False,
         target_arch=None,  # x86_64, arm64, universal2
@@ -158,7 +103,7 @@ coll = COLLECT(exe,
                 a.datas,
                 strip=False,
                 upx=True,
-                upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
+                upx_exclude=[],
                 name=appName)
 app = BUNDLE(coll,
             name=appName+'.app',
@@ -183,7 +128,7 @@ exe = EXE(pyz,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
-        upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
+        upx_exclude=[],
         runtime_tmpdir=None,
         console={console},
         disable_windowed_traceback=False,
@@ -207,7 +152,6 @@ exe = EXE(pyz,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
-        upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
         console={console},
         disable_windowed_traceback=False,
         target_arch=None,
@@ -220,7 +164,7 @@ coll = COLLECT(exe,
             a.datas,
             strip=False,
             upx=True,
-            upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
+            upx_exclude=[],
             name=appName)
 
 '''
