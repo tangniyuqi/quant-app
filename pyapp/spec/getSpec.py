@@ -44,7 +44,7 @@ def specFirstPart():
 import os
 
 import PyInstaller.config
-from PyInstaller.utils.hooks import copy_metadata
+from PyInstaller.utils.hooks import copy_metadata, collect_all, collect_submodules, collect_dynamic_libs
 
 # 存放最终打包成app的相对路径
 buildPath = '{buildPath}'
@@ -66,18 +66,55 @@ appName = '{appName}'
 version = '{version}'
 
 extra_datas = []
-for _pkg in ['pytz']:
+extra_binaries = []
+extra_hiddenimports = []
+
+def _extend_unique(dst, items):
+    s = set(dst)
+    for x in items:
+        if x in s:
+            continue
+        dst.append(x)
+        s.add(x)
+
+for _pkg in ['pytz', 'pandas', 'numpy']:
     try:
-        extra_datas += copy_metadata(_pkg)
+        _extend_unique(extra_datas, copy_metadata(_pkg))
     except Exception:
         pass
+
+for _pkg in ['pandas', 'numpy']:
+    try:
+        _datas, _binaries, _hiddenimports = collect_all(_pkg)
+        _extend_unique(extra_datas, _datas)
+        _extend_unique(extra_binaries, _binaries)
+        _extend_unique(extra_hiddenimports, _hiddenimports)
+    except Exception:
+        pass
+
+for _m in [
+    'pandas._libs.pandas_datetime',
+    'pandas._libs.tslibs.np_datetime',
+]:
+    if _m not in extra_hiddenimports:
+        extra_hiddenimports.append(_m)
+
+try:
+    _extend_unique(extra_hiddenimports, collect_submodules('pandas._libs'))
+except Exception:
+    pass
+
+try:
+    _extend_unique(extra_binaries, collect_dynamic_libs('pandas'))
+except Exception:
+    pass
 
 
 a = Analysis(['../../main.py'],
             pathex=[],
-            binaries=[{addDll}],
+            binaries=[{addDll}] + extra_binaries,
             datas=[{addModules}] + extra_datas,
-            hiddenimports=[],
+            hiddenimports=extra_hiddenimports,
             hookspath=[],
             hooksconfig={{}},
             runtime_hooks=[],
@@ -102,6 +139,7 @@ exe = EXE(pyz,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
+        upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
         console={console},
         disable_windowed_traceback=False,
         target_arch=None,  # x86_64, arm64, universal2
@@ -113,7 +151,7 @@ coll = COLLECT(exe,
                 a.datas,
                 strip=False,
                 upx=True,
-                upx_exclude=[],
+                upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
                 name=appName)
 app = BUNDLE(coll,
             name=appName+'.app',
@@ -138,7 +176,7 @@ exe = EXE(pyz,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
-        upx_exclude=[],
+        upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
         runtime_tmpdir=None,
         console={console},
         disable_windowed_traceback=False,
@@ -162,6 +200,7 @@ exe = EXE(pyz,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
+        upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
         console={console},
         disable_windowed_traceback=False,
         target_arch=None,
@@ -174,7 +213,7 @@ coll = COLLECT(exe,
             a.datas,
             strip=False,
             upx=True,
-            upx_exclude=[],
+            upx_exclude=['pandas*.pyd', 'numpy*.pyd', 'mkl*.dll', 'libopenblas*.dll'],
             name=appName)
 
 '''
