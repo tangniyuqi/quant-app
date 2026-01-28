@@ -92,15 +92,22 @@ for _pkg in ['pandas', 'numpy']:
     except Exception:
         pass
 
+# 显式添加 pandas 核心依赖的隐藏导入
 for _m in [
-    'pandas._libs.pandas_datetime',
+    'pandas',
+    'pandas._libs',
+    'pandas._libs.tslibs',
     'pandas._libs.tslibs.np_datetime',
+    'pandas._libs.tslibs.timedeltas',
+    'pandas._libs.tslibs.nattype',
+    'pandas._libs.tslibs.timezones',
+    'pandas._libs.pandas_datetime',
 ]:
     if _m not in extra_hiddenimports:
         extra_hiddenimports.append(_m)
 
 try:
-    _extend_unique(extra_hiddenimports, collect_submodules('pandas._libs'))
+    _extend_unique(extra_hiddenimports, collect_submodules('pandas'))
 except Exception:
     pass
 
