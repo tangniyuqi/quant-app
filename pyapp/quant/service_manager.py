@@ -2,6 +2,7 @@ import os
 import psutil
 import threading
 import uvicorn
+import platform
 from pyapp.server import app as task_app
 from pyapp.proxy_server import create_proxy_app
 
@@ -25,7 +26,8 @@ class ServiceManager:
         """
         try:
             client_path = client_path or ''
-            if not client_path:
+            # 在非 Windows 平台允许空路径（用于 Mock）
+            if not client_path and platform.system() == 'Windows':
                 return 400, '客户端路径不能为空', None
 
             if port in cls._internal_servers:

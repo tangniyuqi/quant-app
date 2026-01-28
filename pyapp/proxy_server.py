@@ -2,7 +2,12 @@ import os
 import threading
 import platform
 from fastapi import FastAPI, HTTPException, Header, Depends, Query
-from pyapp.server import OrderRequest
+from pydantic import BaseModel
+
+class OrderRequest(BaseModel):
+    security: str
+    price: float
+    amount: int
 
 class MockTrader:
     """Mock Trader for macOS/Linux development"""
@@ -58,38 +63,52 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
 
     @proxy_app.on_event("startup")
     async def startup_event():
+        system_platform = platform.system()
+        print(f"DEBUG: Startup platform detection: {system_platform}")
+
         # 如果是 macOS 或 Linux，使用 Mock 模式，避免 Xlib 依赖错误
-        if platform.system() in ['Darwin', 'Linux']:
-            print(f"Detected {platform.system()}, using MockTrader for development.")
+        if system_platform in ['Darwin', 'Linux']:
+            print(f"Detected {system_platform}, using MockTrader for development.")
             proxy_app.state.user = MockTrader()
             return
 
-        try:
-            import easytrader
-            from easytrader import grid_strategies
-            from . import client_patch
-
-            user = easytrader.use(proxy_app.state.client_type)
-            user.grid_strategy = grid_strategies.Copy
-            proxy_app.state.client_path = resolve_client_path(proxy_app.state.client_type, proxy_app.state.client_path)
-            user.connect(proxy_app.state.client_path)
-            # user.enable_type_keys_for_editor()
-            # user.grid_strategy = grid_strategies.Xls
-            # user.grid_strategy_instance.tmp_folder = r'C:\Temp'
-            # user.return_response = True # 是否返回成交回报
-            # user.prepare("同花顺安装路径", username="账户", password="密码") # 若需自动登录
-
-            proxy_app.state.user = user
-            print(f"Successfully connected to client: {proxy_app.state.client_path}")
-        except Exception as e:
-            print(f"Failed to connect to client: {e}")
-            proxy_app.state.startup_error = str(e)
-            # 不抛出异常，允许服务启动，但在调用接口时报错
+        # 在 Windows 环境下，我们延迟导入 easytrader 到实际使用时
+        # 这样可以避免打包后的 pandas 循环导入问题
+        proxy_app.state.user = None
+        proxy_app.state.startup_error = "Trader will be initialized on first use to avoid pandas circular import issues in packaged environment"
+        print("Windows environment detected. easytrader will be initialized on first API call to avoid pandas circular import issues.")
 
     def get_user():
         if not proxy_app.state.user:
-            error_msg = getattr(proxy_app.state, "startup_error", "Unknown initialization error")
-            raise HTTPException(status_code=500, detail=f"Trader not connected. Error: {error_msg}")
+            # 如果是 Windows 环境且尚未初始化，尝试延迟导入 easytrader
+            if platform.system() == 'Windows':
+                try:
+                    import easytrader
+                    from easytrader import grid_strategies
+                    from . import client_patch
+
+                    user = easytrader.use(proxy_app.state.client_type)
+                    user.grid_strategy = grid_strategies.Copy
+                    proxy_app.state.client_path = resolve_client_path(proxy_app.state.client_type, proxy_app.state.client_path)
+                    user.connect(proxy_app.state.client_path)
+                    user.enable_type_keys_for_editor()
+                    # user.grid_strategy = grid_strategies.Xls
+                    # user.grid_strategy_instance.tmp_folder = r'C:\Temp'
+                    # user.return_response = True # 是否返回成交回报
+                    # user.prepare("同花顺安装路径", username="账户", password="密码") # 若需自动登录
+                    
+                    proxy_app.state.user = user
+                    proxy_app.state.startup_error = None
+                    print(f"Successfully connected to client: {proxy_app.state.client_path}")
+                    return user
+                except Exception as e:
+                    error_msg = f"Failed to connect to client: {e}"
+                    proxy_app.state.startup_error = error_msg
+                    print(error_msg)
+                    raise HTTPException(status_code=500, detail=f"Trader not connected. Error: {error_msg}")
+            else:
+                error_msg = getattr(proxy_app.state, "startup_error", "Unknown initialization error")
+                raise HTTPException(status_code=500, detail=f"Trader not connected. Error: {error_msg}")
         return proxy_app.state.user
 
     async def verify_token(x_token: str = Header(None), token: str = Query(None)):
