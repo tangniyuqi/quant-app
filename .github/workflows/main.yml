@@ -8,10 +8,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-15-intel # Intel 系列芯片 (x64)
-            arch: x64
-          - os: macos-latest # M 系列芯片 (ARM64)
-            arch: arm64
+          # - os: macos-15-intel # Intel 系列芯片 (x64)
+          #   arch: x64
+          # - os: macos-latest # M 系列芯片 (ARM64)
+          #   arch: arm64
           - os: windows-latest
             arch: x64
     steps:
@@ -47,7 +47,7 @@ jobs:
       - name: 安装Python3环境
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.12"
           cache: "pip"
 
       - name: 初始化打包环境
