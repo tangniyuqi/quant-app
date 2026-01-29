@@ -28,8 +28,8 @@ def patch_easytrader():
     # key: 项目中的源文件 (相对于项目根目录)
     # value: 目标文件 (相对于包根目录)
     replacements = {
-        'pyapp/patch/easytrader/clienttrader.py': 'clienttrader.py', 
-        'pyapp/patch/easytrader/config/client.py': 'config/client.py', 
+        'patch/easytrader/clienttrader.py': 'clienttrader.py', 
+        'patch/easytrader/config/client.py': 'config/client.py', 
     }
 
     if not replacements:
@@ -37,8 +37,9 @@ def patch_easytrader():
         return
 
     for src_rel, dst_rel in replacements.items():
-        src_path = os.path.join(project_root, src_rel)
-        dst_path = os.path.join(package_path, dst_rel)
+        # 使用 normpath 自动适配当前系统的路径分隔符（Windows下为 \，Linux/Mac下为 /）
+        src_path = os.path.normpath(os.path.join(project_root, src_rel))
+        dst_path = os.path.normpath(os.path.join(package_path, dst_rel))
 
         if not os.path.exists(src_path):
             print(f"Warning: Source file not found: {src_path}")
