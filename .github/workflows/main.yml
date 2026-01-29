@@ -56,9 +56,9 @@ jobs:
       - name: 替换包源码
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            ./pyapp/pyenv/pyenv/Scripts/python pyapp/patch_deps.py
+            ./pyapp/pyenv/pyenv/Scripts/python pyapp/patch/patch_deps.py
           else
-            ./pyapp/pyenv/bin/python pyapp/patch_deps.py
+            ./pyapp/pyenv/bin/python pyapp/patch/patch_deps.py
           fi
         shell: bash
 

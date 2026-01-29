@@ -85,7 +85,7 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
                 try:
                     import easytrader
                     from easytrader import grid_strategies
-                    from . import client_patch
+                    from .patch import server_patch
 
                     user = easytrader.use(proxy_app.state.client_type)
                     user.grid_strategy = grid_strategies.Copy
