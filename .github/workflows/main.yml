@@ -53,6 +53,15 @@ jobs:
       - name: 初始化打包环境
         run: pnpm run init
 
+      - name: 替换包源码
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            ./pyapp/pyenv/pyenv/Scripts/python pyapp/patch_deps.py
+          else
+            ./pyapp/pyenv/bin/python pyapp/patch_deps.py
+          fi
+        shell: bash
+
       - name: 开始打包
         run: |
           if [ "${{ runner.os }}" == "macOS" ]; then
