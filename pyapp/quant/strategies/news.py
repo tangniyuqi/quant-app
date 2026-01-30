@@ -28,7 +28,8 @@ class NewsStrategy(BaseStrategy):
         self.event_keywords = config.get('eventKeywords', [])
        
         # News Source Config
-        self.monitor_interval = int(config.get('monitorInterval', 60))
+        self.monitor_interval = max(1, min(3600, int(config.get('monitorInterval', 10))))  # 限制在1-3600范围内
+        self.batch_size = max(1, min(100, int(config.get('batchSize', 10))))  # 限制在1-100范围内
         
         # Notification
         self.enable_feishu = config.get('enableFeishu', False)
@@ -77,7 +78,7 @@ class NewsStrategy(BaseStrategy):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                params = {'pageSize': 1}
+                params = {'pageSize': self.batch_size}
                 headers = {
                     'x-token': self.token,
                     'Content-Type': 'application/json'
@@ -112,7 +113,7 @@ class NewsStrategy(BaseStrategy):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                params = {'pageSize': 1, 'last_id': last_id}
+                params = {'pageSize': self.batch_size, 'last_id': last_id}
                 headers = {
                     'x-token': self.token,
                     'Content-Type': 'application/json'
@@ -176,7 +177,7 @@ class NewsStrategy(BaseStrategy):
             payload = {
                 "msg_type": "text",
                 "content": {
-                    "text": f"【财经快讯】\n{content}"
+                    "text": content
                 }
             }
             httpx.post(self.feishu_webhook, json=payload, headers=headers, timeout=5)
@@ -190,7 +191,7 @@ class NewsStrategy(BaseStrategy):
             payload = {
                 "msgtype": "text",
                 "text": {
-                    "content": f"【财经快讯】\n{content}"
+                    "content": content
                 }
             }
             httpx.post(self.dingtalk_webhook, json=payload, headers=headers, timeout=5)
@@ -204,7 +205,7 @@ class NewsStrategy(BaseStrategy):
             payload = {
                 "msgtype": "text",
                 "text": {
-                    "content": f"【财经快讯】\n{content}"
+                    "content": content
                 }
             }
             httpx.post(self.wechat_webhook, json=payload, headers=headers, timeout=5)
