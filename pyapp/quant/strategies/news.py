@@ -24,8 +24,9 @@ class NewsStrategy(BaseStrategy):
         self.backend_url = self.data.get('backend_url')
 
         # Keywords
-        self.industry_keywords = config.get('industryKeywords', [])
-        self.event_keywords = config.get('eventKeywords', [])
+        self.target_keywords = config.get('targetKeywords', [])
+        self.trigger_keywords = config.get('triggerKeywords', [])
+        self.excluded_keywords = config.get('excludedKeywords', [])
        
         # News Source Config
         self.monitor_interval = max(1, min(3600, int(config.get('monitorInterval', 10))))  # 限制在1-3600范围内
@@ -140,21 +141,24 @@ class NewsStrategy(BaseStrategy):
 
     def contains_keywords(self, content):
         # 如果都没有配置，直接返回False（避免无过滤全通过）
-        if not self.industry_keywords and not self.event_keywords:
+        if not self.target_keywords and not self.trigger_keywords:
             return False
 
         # 转为小写进行匹配，忽略大小写差异
         content_lower = content.lower()
 
-        # 1. 检查行业关键词 (如果配置了，必须满足其一)
-        if self.industry_keywords and not any(k.lower() in content_lower for k in self.industry_keywords):
+        # 0. 检查排除关键词 (如果有配置，必须都不包含)
+        if self.excluded_keywords and any(k.lower() in content_lower for k in self.excluded_keywords):
             return False
-        
-        # 2. 检查事件关键词 (如果配置了，必须满足其一)
-        if self.event_keywords and not any(k.lower() in content_lower for k in self.event_keywords):
+
+        # 1. 检查标的关键词 (如果配置了，必须满足其一)
+        if self.target_keywords and not any(k.lower() in content_lower for k in self.target_keywords):
             return False
-            
-        # 如果配置的条件都通过了
+
+        # 2. 检查触发关键词 (如果配置了，必须满足其一)
+        if self.trigger_keywords and not any(k.lower() in content_lower for k in self.trigger_keywords):
+            return False
+
         return True
 
     def send_notifications(self, content):
