@@ -61,7 +61,7 @@ class NewsStrategy(BaseStrategy):
                     
                     # 2. 关键词过滤
                     if self.contains_keywords(content):
-                        self.log(f"快讯：{content[:75]}...")
+                        self.log(f"推送快讯：{content[:50]}...")
                             
                         # 3. 推送消息
                         self.send_notifications(content)
