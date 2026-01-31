@@ -34,7 +34,7 @@ class GridStrategy(BaseStrategy):
                     dt = datetime.datetime.strptime(validity_period[:10], "%Y-%m-%d")
                     self.expiration_time = dt.replace(hour=15, minute=0, second=0, microsecond=0)
             except Exception as e:
-                self.log(f"配置错误: 无效的有效期格式 {validity_period}: {e}", "ERROR")
+                self.log(f"任务({id})：无效的有效期格式 {validity_period}: {e}", "ERROR")
         
         self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
         self.enable_real_trade = bool(config.get('enableRealTrade', True))
@@ -42,9 +42,9 @@ class GridStrategy(BaseStrategy):
     def run(self):
         id = self.data.get('id', 0)
         name = self.data.get('name', 'Unknown')
-        self.log(f"正在启动任务({id})：{name}...") 
+        self.log(f"任务({id})：初始化已完成。")
         mode_str = "实盘交易" if self.enable_real_trade else "模拟演示 (仅日志)"
-        self.log(f"当前运行模式: {mode_str}")
+        self.log(f"任务({id})：当前运行模式: {mode_str}")
         
         # 1. 解析配置
         config = self.data.get('task', {}).get('config', {})
@@ -59,7 +59,7 @@ class GridStrategy(BaseStrategy):
                 
         ts_code = stock_info.get('ts_code', '')
         if not ts_code:
-            self.log(f"任务({id})错误：未找到股票代码。", "ERROR")
+            self.log(f"任务({id})：未找到股票代码", "ERROR")
             return
 
         stock_code = ''.join(filter(str.isdigit, ts_code))
@@ -98,6 +98,7 @@ class GridStrategy(BaseStrategy):
         base_price_type = int(config.get('basePriceType', 0)) # 0:无/默认 1:指定 2:当前 3:开盘 4:昨收
         manual_base_price = float(config.get('basePrice', 0))
         base_price_float_ratio = float(config.get('basePriceFloatRatio', 0))
+        reset_base_price_daily = bool(config.get('resetBasePriceDaily', False))
         
         # 交易量参数
         trade_quantity_type = int(config.get('tradeQuantityType', 1)) # 1:固定 2:倍数
@@ -142,6 +143,30 @@ class GridStrategy(BaseStrategy):
         sl_ratio = float(config.get('stopLossRatio', 0))
         sl_price = float(config.get('stopLossPrice', 0))
 
+        def resolve_base_price(quote_data, fallback_price):
+            current = quote_data.get('price', fallback_price)
+            open_price = quote_data.get('open', 0)
+            pre_close = quote_data.get('pre_close', 0)
+            base_price = 0.0
+            if base_price_type == 1:
+                base_price = manual_base_price
+            elif base_price_type == 2:
+                base_price = current
+            elif base_price_type == 3:
+                base_price = open_price if open_price > 0 else current
+            elif base_price_type == 4:
+                base_price = pre_close if pre_close > 0 else current
+            else:
+                base_price = manual_base_price if manual_base_price > 0 else current
+
+            if base_price <= 0:
+                base_price = current
+
+            if base_price_float_ratio != 0:
+                base_price = base_price * (1 + base_price_float_ratio / 100.0)
+
+            return base_price
+
         # 4. 初始化基准价格
         # 获取股票详细信息
         quote = self.trader.get_stock_quote(ts_code)
@@ -153,31 +178,10 @@ class GridStrategy(BaseStrategy):
             quote = self.trader.get_stock_quote(ts_code)
             current_price = quote.get('price', 0)
             if current_price <= 0:
-                self.log(f"任务({id})错误：无法获取实时行情数据。", "ERROR")
+                self.log(f"任务({id})：无法获取实时行情数据。", "ERROR")
                 return
 
-        open_price = quote.get('open', 0)
-        pre_close = quote.get('pre_close', 0)
-        
-        # 确定基准价
-        base_price = 0.0
-        if base_price_type == 1: # 指定价
-            base_price = manual_base_price
-        elif base_price_type == 2: # 当前价
-            base_price = current_price
-        elif base_price_type == 3: # 开盘价
-            base_price = open_price if open_price > 0 else current_price
-        elif base_price_type == 4: # 昨收价
-            base_price = pre_close if pre_close > 0 else current_price
-        else: # 默认逻辑
-            base_price = manual_base_price if manual_base_price > 0 else current_price
-            
-        if base_price <= 0:
-            base_price = current_price
-            
-        # 应用基准价浮动
-        if base_price_float_ratio != 0:
-            base_price = base_price * (1 + base_price_float_ratio / 100.0)
+        base_price = resolve_base_price(quote, current_price)
             
         base_price_type_map = {
             0: "无",
@@ -319,13 +323,14 @@ class GridStrategy(BaseStrategy):
         self._update_task_position(stock_code)
 
         is_paused = False
+        last_trading_date = None
         self.log(f"任务({id})初始化完成，运行主策略...")
 
         while self.running:
             try:
                 # 0. 有效期检查
+                now = datetime.datetime.now()
                 if self.expiration_time:
-                    now = datetime.datetime.now()
                     if now > self.expiration_time:
                         self.log(f"任务({id})有效期已至 ({self.expiration_time})，自动停止任务...", "WARNING")
                         
@@ -358,6 +363,46 @@ class GridStrategy(BaseStrategy):
                 if current_price <= 0:
                     time.sleep(monitor_interval)
                     continue
+
+                # 跨交易日重置逻辑
+                if reset_base_price_daily:
+                    current_date = now.date()
+                    if last_trading_date is None:
+                        last_trading_date = current_date
+                    elif current_date != last_trading_date:
+                        base_price = resolve_base_price(quote, current_price)
+                        last_layer_index = self._get_layer_index(current_price, base_price)
+                        if trade_layers > 0:
+                            last_layer_index = max(-trade_layers, min(trade_layers, last_layer_index))
+
+                        conf_upper = float(config.get('upperPrice', 0))
+                        conf_lower = float(config.get('lowerPrice', 0))
+                        if conf_upper <= 0:
+                            if trade_layers > 0 and layer_percent > 0:
+                                upper_price = base_price * math.pow(1 + layer_percent, trade_layers)
+                            else:
+                                upper_price = base_price * 1.2
+                        else:
+                            upper_price = conf_upper
+
+                        if conf_lower <= 0:
+                            if trade_layers > 0 and layer_percent > 0:
+                                lower_price = base_price * math.pow(1 + layer_percent, -trade_layers)
+                            else:
+                                lower_price = base_price * 0.8
+                        else:
+                            lower_price = conf_lower
+
+                        last_trade_time = 0
+                        last_trade_price = 0
+                        layer_repeat_counts = {}
+                        waiting_for_fallback = False
+                        peak_price = 0.0
+                        waiting_for_rebound = False
+                        valley_price = 0.0
+                        type_str = base_price_type_map.get(base_price_type, str(base_price_type))
+                        last_trading_date = current_date
+                        self.log(f"任务({id})跨交易日刷新基准价：{base_price:.3f}，类型: {type_str}，范围：[{lower_price:.3f}, {upper_price:.3f}]")
 
                 # 6. 策略重置检查
                 if max_resets > 0 and reset_count < max_resets and reset_ratio > 0:

@@ -24,7 +24,7 @@ class Config:
     ##
     appName = '智子量化'  # 应用名称
     appNameEN = 'Sophon'    # 应用名称-英文（用于生成缓存文件夹，必须是英文）
-    appVersion = "v1.0.6"  # 应用版本号
+    appVersion = "v1.0.7"  # 应用版本号
     appDeveloper = "Tang Ming"  # 应用开发者
     appBlogs = "https://go.noooya.com"  # 个人博客
     appPackage = 'app.sophon.quant'    # 应用包名，用于在本地电脑生成 vip.pangao.ppx 唯一文件夹

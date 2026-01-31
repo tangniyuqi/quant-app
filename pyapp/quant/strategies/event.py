@@ -55,14 +55,14 @@ class EventStrategy(BaseStrategy):
     def run(self):
         id = self.data.get('id', 0)
         name = self.data.get('name', 'Unknown')
-        self.log(f"正在启动事件驱动AI策略任务({id})：{name}...")
+        self.log(f"任务({id})：初始化已完成。")
         
         if not self.ai_key:
-            self.log("错误：未配置大模型AI Key", "ERROR")
+            self.log(f"任务({id})：未配置大模型AI Key", "ERROR")
             return
 
         self.last_news_id = self.fetch_latest_news_id()
-        self.log(f"策略启动完成，开始监控财经快讯...")
+        self.log(f"任务({id})：策略启动完成，开始监控快讯和AI分析...")
 
         while self.running:
             try:
@@ -75,7 +75,7 @@ class EventStrategy(BaseStrategy):
                     
                     # 2. 关键词过滤
                     if self.contains_keywords(content):
-                        self.log(f"发现关注快讯：{content[:50]}...")
+                        self.log(f"任务({id})：推送快讯-{content[:50]}...")
                             
                         # 3. AI分析
                         analysis_result = self.analyze_news_with_ai(content)
@@ -91,7 +91,7 @@ class EventStrategy(BaseStrategy):
                 time.sleep(self.monitor_interval)
                 
             except Exception as e:
-                self.log(f"策略运行异常：{e}", "ERROR")
+                self.log(f"任务({id})：策略运行异常：{e}", "ERROR")
                 time.sleep(10)
 
     def fetch_latest_news_id(self):

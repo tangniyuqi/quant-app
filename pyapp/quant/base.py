@@ -4,11 +4,12 @@ import time
 from .trader import QuantTrader
 
 class BaseStrategy:
-    def __init__(self, data, log_callback=None):
+    def __init__(self, data, log_callback=None, connect_trader=True):
         self.data = data
         self.log_callback = log_callback
         self.running = False
         self.thread = None
+        self.connect_trader = connect_trader
         self.trader = QuantTrader(log_callback)
         
         # 初始化交易器，根据任务配置中的账户信息连接到真实交易接口或模拟交易接口
@@ -16,10 +17,10 @@ class BaseStrategy:
         backend_url = data.get('backend_url')
         token = data.get('token')
         
-        if account:
+        if self.connect_trader and account:
             print(f"正在连接账户：{account.get('broker')}")
             self.trader.connect(account, backend_url=backend_url, token=token)
-        else:
+        elif self.connect_trader:
             self.log("任务配置中未找到账户信息，使用模拟交易接口。", "WARNING")
 
     def log(self, message, level='INFO'):
@@ -38,11 +39,13 @@ class BaseStrategy:
         self.thread = threading.Thread(target=self._run_loop)
         self.thread.daemon = True
         self.thread.start()
-        self.trader.start_balance_monitor(interval=600)
+        if self.connect_trader:
+            self.trader.start_balance_monitor(interval=600)
 
     def stop(self):
         self.running = False
-        self.trader.stop_balance_monitor()
+        if self.connect_trader:
+            self.trader.stop_balance_monitor()
         if self.thread and self.thread != threading.current_thread():
             self.thread.join(timeout=1)
 

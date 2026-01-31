@@ -64,14 +64,14 @@ def getJson():
 filename = '""" + dmgName + """'
 volume_name = '""" + dmgName + """.dmg'
 format = 'UDBZ'
-files = ['""" + pyappDir + """/../build/""" + appName + """.app', '""" + pyappDir + """/package/dmg/智子量化.webloc']
+files = ['""" + pyappDir + """/../build/""" + appName + """.app', '""" + pyappDir + """/package/dmg/""" + appName + """.webloc']
 symlinks = {'Applications': '/Applications'}
 icon_locations = {
     '""" + appName + """.app': (180, 190),
     'Applications': (500, 190),
-    '智子量化.webloc': (500, 290)
+    '""" + appName + """.webloc': (500, 290)
 }
-window_rect = ((200, 200), (680, 410))
+window_rect = ((200, 200), (680, 407))
 icon_size = 60
 text_size = 12
 badge_icon = '""" + pyappDir + """/icon/logo.icns'

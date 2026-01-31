@@ -6,7 +6,7 @@ from ..base import BaseStrategy
 
 class NewsStrategy(BaseStrategy):
     def __init__(self, data, log_callback=None):
-        super().__init__(data, log_callback)
+        super().__init__(data, log_callback, connect_trader=False)
         self._init_config()
         self.last_news_id = 0
         self.running = False
@@ -45,10 +45,10 @@ class NewsStrategy(BaseStrategy):
     def run(self):
         id = self.data.get('id', 0)
         name = self.data.get('name', 'Unknown')
-        self.log(f"正在启动事件驱动AI策略任务({id})：{name}...")
+        self.log(f"任务({id})：初始化已完成。")
         
         self.last_news_id = self.fetch_latest_news_id()
-        self.log(f"策略启动完成，开始监控财经快讯...")
+        self.log(f"任务({id})：策略启动完成，开始监控快讯...")
 
         while self.running:
             try:
