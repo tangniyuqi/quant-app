@@ -34,7 +34,7 @@ class GridStrategy(BaseStrategy):
                     dt = datetime.datetime.strptime(validity_period[:10], "%Y-%m-%d")
                     self.expiration_time = dt.replace(hour=15, minute=0, second=0, microsecond=0)
             except Exception as e:
-                self.log(f"任务({id})：无效的有效期格式 {validity_period}: {e}", "ERROR")
+                self.log(f"任务({self.data.get('id', 0)})：无效的有效期格式 {validity_period}: {e}", "ERROR")
         
         self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
         self.enable_real_trade = bool(config.get('enableRealTrade', True))
@@ -122,6 +122,9 @@ class GridStrategy(BaseStrategy):
         #                 PARTITIONED - 分治模式，基准线之上只卖不买，基准线之下只买不卖
         deployment_mode = config.get('deploymentMode', 'FULL_RANGE')
         # self.log(f"任务({id})策略模式: {deployment_mode}")
+        
+        # 更新 Grid Type (确保与 run 中获取的 config 一致)
+        self.zeroLayerMode = int(config.get('zeroLayerMode', 1))
 
         # 价格区间
         upper_price = float(config.get('upperPrice', 0))
@@ -324,7 +327,7 @@ class GridStrategy(BaseStrategy):
 
         is_paused = False
         last_trading_date = None
-        self.log(f"任务({id})初始化完成，运行主策略...")
+        self.log(f"任务({id})：初始化完成，运行主策略...")
 
         while self.running:
             try:
@@ -673,7 +676,7 @@ class GridStrategy(BaseStrategy):
                         # 价格下跌 -> 买入
                         
                         # 分治模式检查：基准线之上禁止买入
-                        # 注意：curr_index > 0 表示在基准线之下
+                        # 注意：curr_index > 0 表示在基准线之上
                         if deployment_mode == 'PARTITIONED' and curr_index > 0:
                             self.log(f"任务({id})分治模式限制：基准线之上不执行层级买入 (当前 {curr_index})", "DEBUG")
                             last_layer_index = curr_index
@@ -793,7 +796,24 @@ class GridStrategy(BaseStrategy):
     def _get_layer_index(self, price, base_price):
         """计算层级索引"""
         if price <= 0 or base_price <= 0 or self.log_layer_base == 0: return 0
-        return int(math.floor(math.log(price / base_price) / self.log_layer_base))
+        
+        raw_float = math.log(price / base_price) / self.log_layer_base
+
+        if self.zeroLayerMode == 1: # 双倍宽(Base±P)
+            raw_int = int(math.floor(raw_float))
+            if raw_int == -1:
+                return 0
+            elif raw_int < -1:
+                return raw_int + 1
+            else:
+                return raw_int
+
+        elif self.zeroLayerMode == 2: # 中心对称(Base±P/2)
+            return int(math.floor(raw_float + 0.5))
+            
+        else: # self.zeroLayerMode == 3: # 标准单边(Base~Base+P)
+            return int(math.floor(raw_float))
+
 
     def _stop_profit_sell(self, stock_code, price):
         pos = self.trader.get_position(stock_code)
