@@ -71,7 +71,7 @@ class QuantTrader:
             msg = f'服务器连接验证失败：{e}' # self.log(msg, 'ERROR') #重复消息
             raise Exception(msg)
 
-    def _normalize_order_price(self, price):
+    def _normalize_price(self, price):
         try:
             return float(Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
         except (InvalidOperation, TypeError, ValueError):
@@ -226,7 +226,7 @@ class QuantTrader:
             return None
             
         try:
-            price = self._normalize_order_price(price)
+            price = self._normalize_price(price)
             res = self.user.buy(stock_code, price=price, amount=volume)
             if res:
                 content = f'股票: {stock_code}\n价格: {price}\n数量: {volume}'
@@ -245,7 +245,7 @@ class QuantTrader:
             return None
             
         try:
-            price = self._normalize_order_price(price)
+            price = self._normalize_price(price)
             res = self.user.sell(stock_code, price=price, amount=volume)
             if res:
                 content = f'股票: {stock_code}\n价格: {price}\n数量: {volume}'

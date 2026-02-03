@@ -247,7 +247,7 @@ class GridStrategy(BaseStrategy):
                             self._save_trade_record("sell", current_price, align_vol, f"Auto Align {last_layer_index}")
                             self._update_task_position(stock_code)
                     else:
-                        self.log(f"任务({id})启动补卖失败：持仓不足(需{align_vol}, 有{available})", "WARNING")
+                        self.log(f"任务({id})启动补卖失败：持仓不足(需{align_vol}, 有{available})，可能是T+1限制导致无法卖出。", "WARNING")
 
             elif last_layer_index < 0:
                 # 价格在基准之下 -> 价格下跌，应增加持仓 -> 补买
@@ -666,7 +666,7 @@ class GridStrategy(BaseStrategy):
                             elif not res:
                                 pass
                         else:
-                            self.log(f"任务({id})可卖持仓不足。需 {trade_vol}，有 {available}", "WARNING")
+                            self.log(f"任务({id})可卖持仓不足。需 {trade_vol}，有 {available}，可能是T+1限制导致无法卖出。", "WARNING")
                             if sell_triggered_by_fallback:
                                 waiting_for_fallback = False
                                 peak_price = 0
@@ -822,7 +822,10 @@ class GridStrategy(BaseStrategy):
             name = self.data.get('name', 'Unknown')
             reason = f"任务: {name}({self.data.get('id')})\n原因: 触发止盈"
             res = self._safe_sell(stock_code, price, avail, reason=reason)
-            self._save_trade_record("sell", price, avail, "Stop Profit")
+            if res:
+                self._save_trade_record("sell", price, avail, "Stop Profit")
+        else:
+            self.log(f"任务({self.data.get('id')})触发止盈，但可用持仓不足(可能是T+1限制)，无法执行卖出。", "WARNING")
 
     def _stop_loss_sell(self, stock_code, price):
         pos = self.trader.get_position(stock_code)
@@ -831,7 +834,10 @@ class GridStrategy(BaseStrategy):
             name = self.data.get('name', 'Unknown')
             reason = f"任务: {name}({self.data.get('id')})\n原因: 触发止损"
             res = self._safe_sell(stock_code, price, avail, reason=reason)
-            self._save_trade_record("sell", price, avail, "Stop Loss")
+            if res:
+                self._save_trade_record("sell", price, avail, "Stop Loss")
+        else:
+            self.log(f"任务({self.data.get('id')})触发止损，但可用持仓不足(可能是T+1限制)，无法执行卖出。", "WARNING")
 
     def _safe_buy(self, stock_code, price, quantity, reason):
         if not self.enable_real_trade:
