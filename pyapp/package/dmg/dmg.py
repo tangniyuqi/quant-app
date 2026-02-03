@@ -1,6 +1,6 @@
 
-filename = '智子量化-v1.0.7_macOS'
-volume_name = '智子量化-v1.0.7_macOS.dmg'
+filename = '智子量化-v1.0.8_macOS'
+volume_name = '智子量化-v1.0.8_macOS.dmg'
 format = 'UDBZ'
 files = ['/Users/a1/data/python/quant-app/pyapp/../build/智子量化.app', '/Users/a1/data/python/quant-app/pyapp/package/dmg/智子量化.webloc']
 symlinks = {'Applications': '/Applications'}

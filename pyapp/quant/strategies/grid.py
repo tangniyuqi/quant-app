@@ -654,7 +654,7 @@ class GridStrategy(BaseStrategy):
                         
                         if available >= trade_vol:
                             reason = f"任务: {name}({id})\n原因: 上涨触发"
-                            res = self.trader.sell(stock_code, current_price, trade_vol, reason=reason)
+                            res = self._safe_sell(stock_code, current_price, trade_vol, reason=reason)
                             if res:
                                 self.log(f"任务({id})卖出委托已发送：{res}")
                                 self._save_trade_record("sell", current_price, trade_vol, f"Grid Sell {curr_index}")
@@ -771,7 +771,7 @@ class GridStrategy(BaseStrategy):
                                     valley_price = 0
                                 last_layer_index = curr_index
                             else:
-                                res = self.trader.buy(stock_code, current_price, trade_vol, reason=reason)
+                                res = self._safe_buy(stock_code, current_price, trade_vol, reason=reason)
                                 if res:
                                     self.log(f"任务({id})买入委托已发送：{res}")
                                     self._save_trade_record("buy", current_price, trade_vol, f"Grid Buy {curr_index}")

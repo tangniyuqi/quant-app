@@ -5,6 +5,7 @@ import urllib.request
 import threading
 import json
 import requests
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from easytrader import remoteclient
 
 class QuantTrader:
@@ -69,6 +70,15 @@ class QuantTrader:
             self.user = None
             msg = f'服务器连接验证失败：{e}' # self.log(msg, 'ERROR') #重复消息
             raise Exception(msg)
+
+    def _normalize_order_price(self, price):
+        try:
+            return float(Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        except (InvalidOperation, TypeError, ValueError):
+            try:
+                return float(f"{float(price):.2f}")
+            except Exception:
+                return 0.0
 
     def init_data_source(self, data_platform='tushare', data_source='sina', data_token=None):
         '''初始化数据源'''
@@ -216,6 +226,7 @@ class QuantTrader:
             return None
             
         try:
+            price = self._normalize_order_price(price)
             res = self.user.buy(stock_code, price=price, amount=volume)
             if res:
                 content = f'股票: {stock_code}\n价格: {price}\n数量: {volume}'
@@ -234,6 +245,7 @@ class QuantTrader:
             return None
             
         try:
+            price = self._normalize_order_price(price)
             res = self.user.sell(stock_code, price=price, amount=volume)
             if res:
                 content = f'股票: {stock_code}\n价格: {price}\n数量: {volume}'
