@@ -171,6 +171,28 @@ class GridStrategy(BaseStrategy):
             return base_price
 
         # 4. 初始化基准价格
+        
+        # 等待交易时间
+        is_waiting_start = False
+        while self.running and not self._is_trading_time():
+            if self.expiration_time and datetime.datetime.now() > self.expiration_time:
+                self.log(f"任务({id})有效期已至 ({self.expiration_time})，自动停止任务...", "WARNING")
+                from ..manager import TaskManager
+                TaskManager().stop_task(id)
+                return
+
+            if not is_waiting_start:
+                self.log(f"任务({id})：非交易日期或时段（周一到周五：9:25-11:30，13:00-15:00），等待开盘...", "WARNING")
+                is_waiting_start = True
+
+            time.sleep(10)
+
+        if is_waiting_start and self.running:
+            self.log(f"任务({id})：交易时间到达，开始初始化...")
+            
+        if not self.running:
+            return
+
         # 获取股票详细信息
         quote = self.trader.get_stock_quote(ts_code)
         current_price = quote.get('price', 0)
@@ -332,17 +354,12 @@ class GridStrategy(BaseStrategy):
         while self.running:
             try:
                 # 0. 有效期检查
-                now = datetime.datetime.now()
-                if self.expiration_time:
-                    if now > self.expiration_time:
-                        self.log(f"任务({id})有效期已至 ({self.expiration_time})，自动停止任务...", "WARNING")
-                        
-                        # 自动停止任务
-                        from ..manager import TaskManager
-                        TaskManager().stop_task(id)
-                        
-                        # 退出当前循环，结束 _run_loop
-                        break
+                if self.expiration_time and datetime.datetime.now() > self.expiration_time:
+                    self.log(f"任务({id})有效期已至 ({self.expiration_time})，自动停止任务...", "WARNING")
+                    from ..manager import TaskManager
+                    TaskManager().stop_task(id)
+                    # 退出当前循环，结束 _run_loop
+                    break
 
                 # 检查交易时间
                 trading_status = self._is_trading_time()

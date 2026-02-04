@@ -57,6 +57,8 @@ class BaseStrategy:
             import traceback
             traceback.print_exc()
             self.running = False
+        finally:
+            self.running = False
 
     def run(self):
         raise NotImplementedError
