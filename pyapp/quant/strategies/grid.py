@@ -525,25 +525,22 @@ class GridStrategy(BaseStrategy):
                         
                         # 1. 最小交易间隔检查
                         if min_trade_interval > 0 and time.time() - last_trade_time < min_trade_interval:
-                            # self.log(f"未满足最小交易间隔 {min_trade_interval}s", "DEBUG")
-                            return False
+                            return False, f"未满足最小交易间隔 {min_trade_interval}s"
                             
                         # 2. 最小价差检查 (如果是重复交易或震荡)
                         if last_trade_price > 0:
                             gap = abs(price - last_trade_price) / last_trade_price
                             if gap < min_price_gap:
-                                # self.log(f"未满足最小价差 {min_price_gap*100}% (当前 {gap*100:.2f}%)", "DEBUG")
-                                return False
+                                return False, f"未满足最小价差 {min_price_gap*100}% (当前 {gap*100:.2f}%)"
 
                         # 3. 同层级最大交易次数检查
                         # max_repeat_times 为 0 时表示不限制
                         if max_repeat_times > 0:
                             current_count = layer_repeat_counts.get(index, 0)
                             if index == last_layer_index and current_count >= max_repeat_times:
-                                # self.log(f"层级 {index} 交易次数已达上限 {max_repeat_times}", "DEBUG")
-                                return False
+                                return False, f"层级 {index} 交易次数已达上限 {max_repeat_times}"
                             
-                        return True
+                        return True, ""
 
                     # 更新交易状态函数
                     def update_trade_state(price, index):
@@ -650,7 +647,10 @@ class GridStrategy(BaseStrategy):
                             continue
                         
                         # 安全检查
-                        if not check_trade_safety('sell', current_price, curr_index):
+                        is_safe, unsafe_reason = check_trade_safety('sell', current_price, curr_index)
+                        if not is_safe:
+                             if sell_triggered_by_fallback:
+                                 self.log(f"任务({id})满足回落卖出条件，但未通过安全检查: {unsafe_reason}", "WARNING")
                              time.sleep(monitor_interval) # 避免死循环空转
                              continue
 
@@ -707,7 +707,10 @@ class GridStrategy(BaseStrategy):
                             continue
                             
                         # 安全检查
-                        if not check_trade_safety('buy', current_price, curr_index):
+                        is_safe, unsafe_reason = check_trade_safety('buy', current_price, curr_index)
+                        if not is_safe:
+                             if buy_triggered_by_rebound:
+                                 self.log(f"任务({id})满足反弹买入条件，但未通过安全检查: {unsafe_reason}", "WARNING")
                              time.sleep(monitor_interval)
                              continue
 
