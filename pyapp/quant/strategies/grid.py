@@ -386,7 +386,7 @@ class GridStrategy(BaseStrategy):
 
                 # 跨交易日重置逻辑
                 if reset_base_price_daily:
-                    current_date = now.date()
+                    current_date = datetime.datetime.now().date()
                     if last_trading_date is None:
                         last_trading_date = current_date
                     elif current_date != last_trading_date:
