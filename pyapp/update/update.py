@@ -38,7 +38,7 @@ class AppUpdate:
                 # 已是最新版本
                 return {'code': 1, 'msg': f'{oldVersion}已是最新版本'}
             else:
-                return {'code': 0, 'msg': f'有新版{newVersion}可供更新，当前版本为{oldVersion}。', 'link': resNewInfo['link'], 'assets': resNewInfo['assets'], 'body': resNewInfo['body']}
+                return {'code': 0, 'msg': f'有新版{newVersion}可更新，当前版本为{oldVersion}。', 'link': resNewInfo['link'], 'assets': resNewInfo['assets'], 'body': resNewInfo['body']}
 
     def run(self):
         '''执行更新：0=>下载程序包成功; -1=>联网失败; -2=>下载程序包失败; 1=>已经是最新版本'''
@@ -46,7 +46,7 @@ class AppUpdate:
         if resCheck['code'] == 0:
             resApp = self.__getApp(resCheck['assets'])
             if not resApp['status']:
-                return {'code': -2, 'msg': '下载程序包失败: ' + resApp['msg']}
+                return {'code': -2, 'msg': '下载程序包失败：' + resApp['msg']}
             else:
                 return {'code': 0, 'msg': '下载程序包成功', 'downloadPath': resApp['downloadPath']}
         else:
@@ -65,12 +65,14 @@ class AppUpdate:
             version = resJson['version']    # 版本号
             link = resJson['link']    # 下载页面
             assets = resJson['assets']    # 下载资源
-            body = resJson['content']    # 版本介绍
+            content = resJson['content']    # 版本介绍
+            body = resJson['log'][0]['content']    # 版本介绍
             return {
                 'status': True,
                 'version': version,
                 'link': link,
                 'assets': assets,
+                'content': content,
                 'body': body
             }
         except Exception as e:

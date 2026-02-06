@@ -80,10 +80,34 @@ class NewsStrategy(BaseStrategy):
         """格式化快讯时间"""
         ctime = news.get('ctime') or news.get('created_at')
         if not ctime:
-            return datetime.now().strftime("%H:%M")
+            return datetime.now().strftime("%H:%M:%S")
         
+        if isinstance(ctime, str):
+            try:
+                # 尝试解析 ISO 格式 (例如: 2023-10-27T10:00:00+08:00)
+                if 'T' in ctime:
+                    dt = datetime.fromisoformat(ctime.replace('Z', '+00:00'))
+                    return dt.strftime("%H:%M:%S")
+                
+                # 尝试解析标准 datetime 格式 (例如: 2023-10-27 10:00:00)
+                # 可能会有毫秒部分，简单截断
+                time_str = ctime.split('.')[0]
+                dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                return dt.strftime("%H:%M:%S")
+            except Exception:
+                # 解析失败，直接返回原字符串的前半部分（如果是时间的话）
+                pass
+
         if isinstance(ctime, datetime):
-            return ctime.strftime("%H:%M")
+            return ctime.strftime("%H:%M:%S")
+            
+        if isinstance(ctime, (int, float)):
+            try:
+                return datetime.fromtimestamp(ctime).strftime("%H:%M:%S")
+            except Exception:
+                pass
+                
+        return str(ctime)
                 
     def fetch_latest_news_id(self):
         """
