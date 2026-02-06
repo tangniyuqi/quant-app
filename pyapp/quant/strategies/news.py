@@ -2,6 +2,7 @@
 import time
 import json
 import httpx
+from datetime import datetime
 from ..base import BaseStrategy
 
 class NewsStrategy(BaseStrategy):
@@ -61,10 +62,13 @@ class NewsStrategy(BaseStrategy):
                     
                     # 2. 关键词过滤
                     if self.contains_keywords(content):
+                        news_time = self._format_news_time(news)
+                        full_content = f"{news_time} - {content}"
+                        
                         self.log(f"推送快讯：{content[:50]}...")
                             
                         # 3. 推送消息
-                        self.send_notifications(content)
+                        self.send_notifications(full_content)
                             
                 time.sleep(self.monitor_interval)
                 
@@ -72,6 +76,15 @@ class NewsStrategy(BaseStrategy):
                 self.log(f"策略运行异常：{e}", "ERROR")
                 time.sleep(10)
 
+    def _format_news_time(self, news):
+        """格式化快讯时间"""
+        ctime = news.get('ctime') or news.get('created_at')
+        if not ctime:
+            return datetime.now().strftime("%H:%M")
+        
+        if isinstance(ctime, datetime):
+            return ctime.strftime("%H:%M")
+                
     def fetch_latest_news_id(self):
         """
         获取最新的一条快讯ID，带重试机制

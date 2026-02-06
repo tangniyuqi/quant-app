@@ -231,7 +231,7 @@ class GridStrategy(BaseStrategy):
             else:
                 lower_price = base_price * 0.8
         
-        self.log(f"任务({id})配置：标的={ts_code}, 价格范围=[{lower_price:.3f}, {upper_price:.3f}], 层级={trade_layers}, 间隔={layer_percent*100}%, 基数={base_quantity}(股)")
+        self.log(f"任务({id})配置：标的={ts_code}, 价格范围=[{lower_price:.3f}, {upper_price:.3f}], 层级={trade_layers}, 间隔={layer_percent*100:.2f}%, 基数={base_quantity}(股)")
         
         # 优化：预计算对数常数
         if layer_percent > 0:
