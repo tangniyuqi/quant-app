@@ -65,7 +65,7 @@ class NewsStrategy(BaseStrategy):
                         news_time = self._format_news_time(news)
                         full_content = f"{news_time} - {content}"
                         
-                        self.log(f"推送快讯：{content[:50]}...")
+                        self.log(f"快讯：{content[:50]}...")
                             
                         # 3. 推送消息
                         self.send_notifications(full_content)
