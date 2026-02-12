@@ -277,6 +277,22 @@ class EventStrategy(BaseStrategy):
 
         return None
 
+    @staticmethod
+    def _to_bool(value) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in ("true", "1", "yes", "y", "是"):
+                return True
+            if v in ("false", "0", "no", "n", "否", ""):
+                return False
+        return False
+
     def analyze_news_with_ai(self, content):
         """
         调用AI接口进行分析
@@ -297,7 +313,8 @@ class EventStrategy(BaseStrategy):
         
         # DeepSeek, GPT, Qwen, Gemini, Minimax, GLM, Doubao 等通用模型
         # 使用 Prompt 工程 + JSON Mode (如果支持)
-        prompt = f"""请分析以下财经快讯内容，判断是否对相关标的或行业构成重大利好或利空，并生成交易信号。{deep_thinking_instruction}
+        prompt = f"""
+请分析以下财经快讯内容，判断是否对相关标的或行业构成重大利好或利空，并生成交易信号。{deep_thinking_instruction}
 
 快讯内容：{content}
 
@@ -309,6 +326,7 @@ class EventStrategy(BaseStrategy):
 - signal: 信号类型 (buy/sell/none)
 - reason: 分析理由
 - confidence: 置信度 (0-1)
+- is_priced_in: 是否已price in（布尔值 true/false，不要用字符串）- 如果该消息是旧闻、预期内、或者市场已经提前反应，请标记为true
 """
         
         payload = {
@@ -381,13 +399,20 @@ class EventStrategy(BaseStrategy):
 
     def process_signal(self, analysis):
         signal = analysis.get('signal')
+        if isinstance(signal, str):
+            signal = signal.strip().lower()
+
         stock_code = analysis.get('related_stock')
-        reason = analysis.get('reason')
-        try:
-            confidence = float(analysis.get('confidence', 0))
-        except (ValueError, TypeError):
-            confidence = 0.0
-        
+        if stock_code is not None and not isinstance(stock_code, str):
+            try:
+                stock_code = str(stock_code)
+            except Exception:
+                stock_code = None
+        if isinstance(stock_code, str):
+            stock_code = stock_code.strip()
+
+        reason = analysis.get('reason') or ""
+
         if signal not in ['buy', 'sell'] or not stock_code:
             return
 
@@ -398,6 +423,15 @@ class EventStrategy(BaseStrategy):
         if self.trade_direction == 2 and signal == 'buy':
             self.log(f"当前策略为【空头只卖】，忽略买入信号: {stock_code}", "INFO")
             return
+
+        if self._to_bool(analysis.get('is_priced_in', False)):
+            self.log(f"股票 {stock_code} 信号 {signal} 被判定已Price In，忽略交易。理由: {reason}", "INFO")
+            return
+
+        try:
+            confidence = float(analysis.get('confidence', 0))
+        except (ValueError, TypeError):
+            confidence = 0.0
 
         if confidence < self.confidence_threshold: # 置信度阈值
             self.log(f"信号置信度不足 ({confidence} < {self.confidence_threshold})，忽略。", "INFO")
@@ -414,6 +448,10 @@ class EventStrategy(BaseStrategy):
         price = quote.get('price', 0)
         pre_close = quote.get('pre_close', 0)
         
+        if price <= 0:
+            self.log(f"无法获取股票 {stock_code} 当前价格，跳过。", "ERROR")
+            return
+
         # 风控检查：涨跌幅限制
         if pre_close > 0:
             pct_change = (price - pre_close) / pre_close * 100
@@ -444,10 +482,6 @@ class EventStrategy(BaseStrategy):
                             content_label="风控详情"
                         )
                     return
-
-        if price <= 0:
-            self.log(f"无法获取股票 {stock_code} 当前价格，跳过。", "ERROR")
-            return
 
         # 执行交易
         success = False
@@ -574,19 +608,14 @@ class EventStrategy(BaseStrategy):
 
     def _update_task_position(self, stock_code):
         try:
+            positions = []
             position = self.trader.get_position(stock_code)
-            
-            # EventStrategy 可能涉及多个标的，这里更新当前标的的持仓到任务信息中
-            # 注意：如果后端接口只支持全量更新 positions，这里可能需要先获取旧的合并，或者后端支持 merge
-            # 假设后端直接覆盖 positions，那么对于 EventStrategy 这种多标的，可能需要维护一个内部状态
-            # 但为了简单起见，我们先按 Grid 的方式只上报当前标的，或者全量获取（如果 trader 支持）
-            # 由于 EventStrategy 可以在多个股票上操作，这里只上报当前操作的股票持仓作为 task 的 positions 列表的一个元素
-            # 这可能会覆盖之前的。但通常 EventStrategy 并不像 Grid 那样强绑定一个持仓。
-            # 这里的目的是让前端能看到当前持仓。
+            if position and position.get('total_quantity', 0) > 0:
+                positions = [position]
             
             data = {
                 "id": self.data.get('id'),
-                "positions": [position] if position else [], 
+                "positions": positions, 
             }
             
             self._update_trade_task(data)
@@ -706,6 +735,13 @@ class EventStrategy(BaseStrategy):
                                 "text": {
                                     "tag": "lark_md",
                                     "content": f"**交易信号**：\n{analysis.get('signal', 'none')}"
+                                }
+                            },
+                            {
+                                "is_short": True,
+                                "text": {
+                                    "tag": "lark_md",
+                                    "content": f"**已Price In**：\n{'是' if self._to_bool(analysis.get('is_priced_in', False)) else '否'}"
                                 }
                             },
                             {

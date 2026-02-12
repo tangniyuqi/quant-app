@@ -89,10 +89,12 @@ class GridStrategy(BaseStrategy):
         # 回落标志/峰值记录
         waiting_for_fallback = False
         peak_price = 0.0
-        
+        fallback_monitor_start_layer_index = 0
+
         # 反弹标志/谷值记录
         waiting_for_rebound = False
         valley_price = 0.0
+        rebound_monitor_start_layer_index = 0
 
         # 基准价参数
         base_price_type = int(config.get('basePriceType', 0)) # 0:无/默认 1:指定 2:当前 3:开盘 4:昨收
@@ -121,6 +123,7 @@ class GridStrategy(BaseStrategy):
         # deploymentMode: FULL_RANGE(默认) - 全区间策略，任意位置均可买卖
         #                 PARTITIONED - 分治模式，基准线之上只卖不买，基准线之下只买不卖
         deployment_mode = config.get('deploymentMode', 'FULL_RANGE')
+        include_base_layer = bool(config.get('includeBaseLayer', True))
         # self.log(f"任务({id})策略模式: {deployment_mode}")
         
         # 更新 Grid Type (确保与 run 中获取的 config 一致)
@@ -283,7 +286,7 @@ class GridStrategy(BaseStrategy):
                     available_balance = balance.get('available_balance', 0)
                     need_cash = align_vol * current_price
                     
-                    if available_balance >= need_cash:
+                    if not self.enable_real_trade or available_balance >= need_cash:
                         res = self._safe_buy(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补买")
                         if res:
                             self._save_trade_record("buy", current_price, align_vol, f"Auto Align {last_layer_index}")
@@ -327,7 +330,7 @@ class GridStrategy(BaseStrategy):
                     available_balance = balance.get('available_balance', 0)
                     need_cash = open_vol * current_price
                     
-                    if available_balance >= need_cash:
+                    if not self.enable_real_trade or available_balance >= need_cash:
                         reason = f"任务: {name}({id})\n原因: 自动建仓"
                         res = self._safe_buy(stock_code, current_price, open_vol, reason=reason)
                         if res:
@@ -418,8 +421,10 @@ class GridStrategy(BaseStrategy):
                         layer_repeat_counts = {}
                         waiting_for_fallback = False
                         peak_price = 0.0
+                        fallback_monitor_start_layer_index = 0
                         waiting_for_rebound = False
                         valley_price = 0.0
+                        rebound_monitor_start_layer_index = 0
                         type_str = base_price_type_map.get(base_price_type, str(base_price_type))
                         last_trading_date = current_date
                         self.log(f"任务({id})跨交易日刷新基准价：{base_price:.3f}，类型: {type_str}，范围：[{lower_price:.3f}, {upper_price:.3f}]")
@@ -575,8 +580,8 @@ class GridStrategy(BaseStrategy):
                         elif current_price < last_trade_price:
                             raw_buy_signal = True
 
-                    sell_allowed = trade_direction in [0, 2] and not (deployment_mode == 'PARTITIONED' and curr_index < 0)
-                    buy_allowed = trade_direction in [0, 1] and not (deployment_mode == 'PARTITIONED' and curr_index > 0)
+                    buy_allowed = trade_direction in [0, 1] and not (deployment_mode == 'PARTITIONED' and (curr_index > 0 if include_base_layer else curr_index >= 0))
+                    sell_allowed = trade_direction in [0, 2] and not (deployment_mode == 'PARTITIONED' and (curr_index < 0 if include_base_layer else curr_index <= 0))
 
                     # 1. 回落卖出逻辑
                     if fallback_ratio > 0 and sell_allowed:
@@ -588,13 +593,14 @@ class GridStrategy(BaseStrategy):
                                 self.log(f"任务({id})满足回落卖出条件：峰值 {peak_price} -> 当前 {current_price}")
                                 is_sell_signal = True
                                 sell_triggered_by_fallback = True
-                            elif curr_index <= last_layer_index:
+                            elif curr_index < fallback_monitor_start_layer_index:
                                 self.log(f"任务({id})价格回落至原层级线({curr_index})，未满足回落比例，取消回落卖出监控。")
                                 waiting_for_fallback = False
                                 peak_price = 0
                         elif raw_sell_signal:
                             waiting_for_fallback = True
                             peak_price = current_price
+                            fallback_monitor_start_layer_index = curr_index
                             self.log(f"任务({id})触发上涨({curr_index})，进入回落监控... (目标回落 {fallback_ratio*100}%)")
                     elif sell_allowed:
                         is_sell_signal = raw_sell_signal
@@ -610,13 +616,14 @@ class GridStrategy(BaseStrategy):
                                 self.log(f"任务({id})满足反弹买入条件：谷值 {valley_price} -> 当前 {current_price}")
                                 is_buy_signal = True
                                 buy_triggered_by_rebound = True
-                            elif curr_index >= last_layer_index:
+                            elif curr_index > rebound_monitor_start_layer_index:
                                 self.log(f"任务({id})价格反弹至原层级线({curr_index})，未满足反弹比例，取消反弹买入监控。")
                                 waiting_for_rebound = False
                                 valley_price = 0
                         elif raw_buy_signal:
                             waiting_for_rebound = True
                             valley_price = current_price
+                            rebound_monitor_start_layer_index = curr_index
                             self.log(f"任务({id})触发下跌({curr_index})，进入反弹监控... (目标反弹 {rebound_ratio*100}%)")
                     elif buy_allowed:
                         is_buy_signal = raw_buy_signal
@@ -624,10 +631,9 @@ class GridStrategy(BaseStrategy):
                     if is_sell_signal:
                         # 价格上涨 -> 卖出
                         
-                        # 分治模式检查：基准线之下禁止卖出（除非是止盈止损，但止盈止损在前面已处理）
-                        # 注意：curr_index < 0 表示在基准线之下
-                        if deployment_mode == 'PARTITIONED' and curr_index < 0:
-                            self.log(f"任务({id})分治模式限制：基准线之下不执行卖出 (当前 {curr_index})", "DEBUG")
+                        # 分治模式检查：基准线及之下禁止卖出（若包含基准层则Layer<0，否则Layer<=0）
+                        if deployment_mode == 'PARTITIONED' and (curr_index < 0 if include_base_layer else curr_index <= 0):
+                            self.log(f"任务({id})分治模式限制：基准线及之下不执行卖出 (当前 {curr_index})", "DEBUG")
                             if sell_triggered_by_fallback:
                                 waiting_for_fallback = False
                                 peak_price = 0
@@ -692,10 +698,9 @@ class GridStrategy(BaseStrategy):
                     elif is_buy_signal:
                         # 价格下跌 -> 买入
                         
-                        # 分治模式检查：基准线之上禁止买入
-                        # 注意：curr_index > 0 表示在基准线之上
-                        if deployment_mode == 'PARTITIONED' and curr_index > 0:
-                            self.log(f"任务({id})分治模式限制：基准线之上不执行层级买入 (当前 {curr_index})", "DEBUG")
+                        # 分治模式检查：基准线及之上禁止买入（若包含基准层则Layer>0，否则Layer>=0）
+                        if deployment_mode == 'PARTITIONED' and (curr_index > 0 if include_base_layer else curr_index >= 0):
+                            self.log(f"任务({id})分治模式限制：基准线及之上不执行层级买入 (当前 {curr_index})", "DEBUG")
                             last_layer_index = curr_index
                             time.sleep(monitor_interval)
                             continue
@@ -784,7 +789,7 @@ class GridStrategy(BaseStrategy):
                             available_balance = balance.get('available_balance', 0)
                             need_cash = trade_vol * current_price
 
-                            if available_balance < need_cash:
+                            if self.enable_real_trade and available_balance < need_cash:
                                 self.log(f"任务({id})资金不足，跳过买入。需 {need_cash:.2f}，有 {available_balance:.2f}", "WARNING")
                                 if buy_triggered_by_rebound:
                                     waiting_for_rebound = False

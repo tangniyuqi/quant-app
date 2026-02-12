@@ -309,6 +309,53 @@ class QuantTrader:
             print(f'获取持仓错误：{e}')
             return position
 
+    def get_positions(self):
+        '''获取所有持仓信息'''
+        positions_list = []
+        if not self.user:
+            return positions_list
+
+        try:
+            raw_positions = self.user.position.get('data', [])
+            for p in raw_positions:
+                stock_code = p.get('证券代码') or p.get('stock_code') or ''
+                stock_name = p.get('证券名称') or p.get('stock_name') or ''
+                total_quantity = p.get('持仓数量') or p.get('股票余额') or p.get('实际数量') or p.get('stock_amount') or 0
+                available_quantity = p.get('可用数量') or p.get('可用余额') or p.get('enable_amount') or 0
+                frozen_quantity = p.get('冻结数量') or p.get('冻结余额') or p.get('frozen_quantity') or 0
+                cost_price = p.get('参考成本价') or p.get('成本价') or p.get('参考成本') or p.get('cost_price') or 0.0
+                current_price = p.get('当前价') or p.get('市价') or p.get('current_price') or 0.0
+                market_value = p.get('最新市值') or p.get('市值') or p.get('market_value') or 0.0
+                total_pl_amount = p.get('浮动盈亏') or p.get('盈亏') or p.get('总盈亏') or p.get('total_pl_amount') or 0.0
+                total_pl_ratio = p.get('盈亏比例(%)') or p.get('盈亏比(%)') or p.get('total_pl_ratio') or 0.0
+                daily_pl_amount = p.get('当日盈亏') or p.get('daily_pl_amount') or 0.0
+                daily_pl_ratio = p.get('当日盈亏比(%)') or p.get('daily_pl_ratio') or 0.0
+                position_ratio = p.get('仓位占比(%)') or p.get('仓位占比(%)') or p.get('position_ratio') or 0.0
+                daily_buy_quantity = p.get('当日买入') or p.get('daily_buy_quantity') or 0
+                daily_sell_quantity = p.get('当日卖出') or p.get('daily_sell_quantity') or 0
+                
+                positions_list.append({
+                    'stock_code': stock_code,
+                    'stock_name': stock_name,
+                    'total_quantity': int(total_quantity), 
+                    'available_quantity': int(available_quantity),
+                    'frozen_quantity': int(frozen_quantity),
+                    'cost_price': float(cost_price),
+                    'current_price': float(current_price),
+                    'market_value': float(market_value),
+                    'total_pl_amount': float(total_pl_amount),
+                    'total_pl_ratio': float(total_pl_ratio),
+                    'daily_pl_amount': float(daily_pl_amount),
+                    'daily_pl_ratio': float(daily_pl_ratio),
+                    'position_ratio': float(position_ratio),
+                    'daily_buy_quantity': int(daily_buy_quantity),    
+                    'daily_sell_quantity': int(daily_sell_quantity),
+                })
+            return positions_list
+        except Exception as e:
+            print(f'获取所有持仓错误：{e}')
+            return positions_list
+
     def get_balance(self):
         '''获取资金余额'''
         summary = {'total_asset': 0.0, 'market_value': 0.0, 'available_balance': 0.0}
