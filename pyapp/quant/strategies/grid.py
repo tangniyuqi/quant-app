@@ -56,6 +56,9 @@ class GridStrategy(BaseStrategy):
         if isinstance(stock_info, str):
             try: stock_info = json.loads(stock_info)
             except: pass
+        
+        if not isinstance(stock_info, dict):
+            stock_info = {}
                 
         ts_code = stock_info.get('ts_code', '')
         if not ts_code:
@@ -130,6 +133,9 @@ class GridStrategy(BaseStrategy):
         self.zeroLayerMode = int(config.get('zeroLayerMode', 1))
 
         # 价格区间
+        price_range_mode = int(config.get('priceRangeMode', 1)) # 1:比例 2:价格
+        upper_ratio = float(config.get('upperRatio', 0))
+        lower_ratio = float(config.get('lowerRatio', 0))
         upper_price = float(config.get('upperPrice', 0))
         lower_price = float(config.get('lowerPrice', 0))
         
@@ -222,17 +228,7 @@ class GridStrategy(BaseStrategy):
         self.log(f"任务({id})基准价格确定为：{base_price:.3f}，类型: {type_str}")
 
         # 5. 计算交易层级/范围
-        if upper_price <= 0: 
-            if trade_layers > 0 and layer_percent > 0:
-                upper_price = base_price * math.pow(1 + layer_percent, trade_layers)
-            else:
-                upper_price = base_price * 1.2
-
-        if lower_price <= 0: 
-            if trade_layers > 0 and layer_percent > 0:
-                lower_price = base_price * math.pow(1 + layer_percent, -trade_layers)
-            else:
-                lower_price = base_price * 0.8
+        lower_price, upper_price = self._calculate_price_range(base_price, config)
         
         self.log(f"任务({id})配置：标的={ts_code}, 价格范围=[{lower_price:.3f}, {upper_price:.3f}], 层级={trade_layers}, 间隔={layer_percent*100:.2f}%, 基数={base_quantity}(股)")
         
@@ -398,23 +394,8 @@ class GridStrategy(BaseStrategy):
                         if trade_layers > 0:
                             last_layer_index = max(-trade_layers, min(trade_layers, last_layer_index))
 
-                        conf_upper = float(config.get('upperPrice', 0))
-                        conf_lower = float(config.get('lowerPrice', 0))
-                        if conf_upper <= 0:
-                            if trade_layers > 0 and layer_percent > 0:
-                                upper_price = base_price * math.pow(1 + layer_percent, trade_layers)
-                            else:
-                                upper_price = base_price * 1.2
-                        else:
-                            upper_price = conf_upper
-
-                        if conf_lower <= 0:
-                            if trade_layers > 0 and layer_percent > 0:
-                                lower_price = base_price * math.pow(1 + layer_percent, -trade_layers)
-                            else:
-                                lower_price = base_price * 0.8
-                        else:
-                            lower_price = conf_lower
+                        # 重新计算区间
+                        lower_price, upper_price = self._calculate_price_range(base_price, config)
 
                         last_trade_time = 0
                         last_trade_price = 0
@@ -444,27 +425,19 @@ class GridStrategy(BaseStrategy):
                         base_price = current_price
                         last_layer_index = 0 # current_price is new base
                         
-                        # 重新获取配置以支持动态调整（如果 config 对象内容更新）
-                        conf_upper = float(config.get('upperPrice', 0))
-                        conf_lower = float(config.get('lowerPrice', 0))
+                        # 重置运行状态
+                        last_trade_time = 0
+                        last_trade_price = 0
+                        layer_repeat_counts = {}
+                        waiting_for_fallback = False
+                        peak_price = 0.0
+                        fallback_monitor_start_layer_index = 0
+                        waiting_for_rebound = False
+                        valley_price = 0.0
+                        rebound_monitor_start_layer_index = 0
                         
-                        # 更新上限
-                        if conf_upper <= 0: 
-                            if trade_layers > 0 and layer_percent > 0:
-                                upper_price = base_price * math.pow(1 + layer_percent, trade_layers)
-                            else:
-                                upper_price = base_price * 1.2
-                        else:
-                            upper_price = conf_upper # 确保固定上限也更新（如果用户修改了配置）
-                        
-                        # 更新下限
-                        if conf_lower <= 0: 
-                            if trade_layers > 0 and layer_percent > 0:
-                                lower_price = base_price * math.pow(1 + layer_percent, -trade_layers)
-                            else:
-                                lower_price = base_price * 0.8
-                        else:
-                            lower_price = conf_lower # 确保固定下限也更新
+                        # 重新计算区间
+                        lower_price, upper_price = self._calculate_price_range(base_price, config)
                         
                         # 检查新基准价是否在有效范围内
                         if (upper_price > 0 and base_price > upper_price) or (lower_price > 0 and base_price < lower_price):
@@ -690,10 +663,11 @@ class GridStrategy(BaseStrategy):
                                 pass
                         else:
                             self.log(f"任务({id})可卖持仓不足。需 {trade_vol}，有 {available}，可能是T+1限制导致无法卖出。", "WARNING")
+                            # 更新状态以防止死循环触发（视为跳过本次交易）
+                            update_trade_state(current_price, curr_index)
                             if sell_triggered_by_fallback:
                                 waiting_for_fallback = False
-                                peak_price = 0
-                            last_layer_index = curr_index 
+                                peak_price = 0 
                              
                     elif is_buy_signal:
                         # 价格下跌 -> 买入
@@ -791,10 +765,11 @@ class GridStrategy(BaseStrategy):
 
                             if self.enable_real_trade and available_balance < need_cash:
                                 self.log(f"任务({id})资金不足，跳过买入。需 {need_cash:.2f}，有 {available_balance:.2f}", "WARNING")
+                                # 更新状态以防止死循环触发（视为跳过本次交易）
+                                update_trade_state(current_price, curr_index)
                                 if buy_triggered_by_rebound:
                                     waiting_for_rebound = False
                                     valley_price = 0
-                                last_layer_index = curr_index
                             else:
                                 res = self._safe_buy(stock_code, current_price, trade_vol, reason=reason)
                                 if res:
@@ -839,6 +814,54 @@ class GridStrategy(BaseStrategy):
         else: # self.zeroLayerMode == 3: # 标准单边(Base~Base+P)
             return int(math.floor(raw_float))
 
+    def _calculate_price_range(self, base_price, config):
+        """
+        计算价格区间（包含上下限）
+        返回: (lower_price, upper_price)
+        """
+        price_range_mode = int(config.get('priceRangeMode', 1))
+        
+        upper_price = 0.0
+        lower_price = 0.0
+        
+        # 1. 计算原始区间
+        if price_range_mode == 1: # 比例模式
+            upper_ratio = float(config.get('upperRatio', 0))
+            lower_ratio = float(config.get('lowerRatio', 0))
+                
+            if upper_ratio != 0:
+                upper_price = base_price * (1 + upper_ratio / 100.0)
+            if lower_ratio != 0:
+                lower_price = base_price * (1 + lower_ratio / 100.0)
+                
+        else: # 价格模式
+            upper_price = float(config.get('upperPrice', 0))
+            lower_price = float(config.get('lowerPrice', 0))
+            
+        # 2. 兜底逻辑
+        trade_layers = int(config.get('tradeLayers', 0))
+        layer_percent = float(config.get('layerPercent', 1.0)) / 100.0
+        
+        # 如果计算出的上限无效（<=0），使用默认策略计算
+        if upper_price <= 0:
+            if trade_layers > 0 and layer_percent > 0:
+                upper_price = base_price * math.pow(1 + layer_percent, trade_layers)
+            else:
+                upper_price = base_price * 1.2
+                
+        # 如果计算出的下限无效（<=0），使用默认策略计算
+        if lower_price <= 0:
+            if trade_layers > 0 and layer_percent > 0:
+                lower_price = base_price * math.pow(1 + layer_percent, -trade_layers)
+            else:
+                lower_price = base_price * 0.8
+                
+        # 3. 最终校验与修正
+        if lower_price > upper_price:
+            self.log(f"警告：计算出的下限({lower_price:.3f})高于上限({upper_price:.3f})，自动交换。", "WARNING")
+            lower_price, upper_price = upper_price, lower_price
+            
+        return lower_price, upper_price
 
     def _stop_profit_sell(self, stock_code, price):
         pos = self.trader.get_position(stock_code)
@@ -933,6 +956,9 @@ class GridStrategy(BaseStrategy):
         if isinstance(stock_info, str):
             try: stock_info = json.loads(stock_info)
             except: pass
+        
+        if not isinstance(stock_info, dict):
+            stock_info = {}
 
         account = self.data.get('account', {})
 

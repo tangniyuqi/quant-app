@@ -2,6 +2,7 @@
 from .strategies.grid import GridStrategy
 from .strategies.event import EventStrategy
 from .strategies.news import NewsStrategy
+from .strategies.trend import TrendStrategy
 from .trader import QuantTrader
 
 class TaskManager:
@@ -24,6 +25,10 @@ class TaskManager:
             if log_callback:
                 log_callback('INFO', 'TaskManager', f"任务({task_id})：正在启动中...")
             strategy = GridStrategy(data, log_callback)
+        elif strategy_id == 10002: # 趋势跟踪策略
+            if log_callback:
+                log_callback('INFO', 'TaskManager', f"任务({task_id})：正在启动中...")
+            strategy = TrendStrategy(data, log_callback)
         elif strategy_id == 10006: # 事件驱动AI策略
             if log_callback:
                 log_callback('INFO', 'TaskManager', f"任务({task_id})：正在启动中...")
