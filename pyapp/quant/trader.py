@@ -30,13 +30,43 @@ class QuantTrader:
         创建交易客户端实例
         '''
         server_config = self.account.get('server', {}) 
-        mode = server_config.get('type', 'easytrader-remote')
+        mode = server_config.get('mode', 'easytrader-remote')
         client_type = server_config.get('client_type', 'universal_client')
         host = server_config.get('host', '127.0.0.1')
         port = int(server_config.get('port', 1430))
 
         if mode == 'easytrader':
-            return easytrader.use(client_type)
+            import easytrader
+            from easytrader import grid_strategies
+            
+            client = easytrader.use(client_type)
+            
+            # 本地模式初始化逻辑
+            if client_type in ['universal_client', 'ths', 'tdx', 'ht']:
+                client_path = server_config.get('client_path')
+                if client_path:
+                    # 设置默认策略为 Copy (通常更稳定)
+                    client.grid_strategy = grid_strategies.Copy
+                    client.connect(client_path)
+                    try:
+                        client.enable_type_keys_for_editor()
+                    except Exception:
+                        pass
+                else:
+                    self.log(f'警告：本地模式 {client_type} 未配置 client_path，尝试自动连接...', 'WARNING')
+                    try:
+                        client.connect()
+                    except Exception as e:
+                        self.log(f'自动连接失败: {e}', 'ERROR')
+
+            elif client_type in ['xq', 'yjb']:
+                 try:
+                    # 网页客户端需要 prepare
+                    client.prepare(user='用户名', password='雪球、银河客户端为明文密码', comm_password='华泰通讯密码，其他券商不用')
+                 except Exception as e:
+                    self.log(f'{client_type} 登录失败: {e}', 'ERROR')
+
+            return client
         elif mode == 'easytrader-remote':
             return remoteclient.use(client_type, host=host, port=port)
         elif mode == 'strategyease': # 此处暂按 remoteclient 处理
