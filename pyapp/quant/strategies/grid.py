@@ -25,6 +25,10 @@ class GridStrategy(BaseStrategy):
         else:
             self.log_layer_base = 0.01
 
+        # 高级设置
+        self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
+        self.enable_real_trade = bool(config.get('enableRealTrade', True))
+
         # 任务有效期
         self.expiration_time = None
         validity_period = config.get('validityPeriod')
@@ -36,9 +40,6 @@ class GridStrategy(BaseStrategy):
             except Exception as e:
                 self.log(f"任务({self.data.get('id', 0)})：无效的有效期格式 {validity_period}: {e}", "ERROR")
         
-        self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
-        self.enable_real_trade = bool(config.get('enableRealTrade', True))
-
     def run(self):
         id = self.data.get('id', 0)
         name = self.data.get('name', 'Unknown')

@@ -1,6 +1,8 @@
 import os
 import threading
 import platform
+import logging
+from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Depends, Query
 from pydantic import BaseModel
 
@@ -45,20 +47,32 @@ def create_proxy_app(client_type: str = 'universal_client', client_path: str = '
     # 全局锁，防止多线程并发操作 GUI
     server_lock = threading.Lock()
 
-    def resolve_client_path(client_type: str, client_path: str) -> str:
-        if not client_path:
+    def resolve_client_path(client_type: str, client_path: Optional[str]) -> Optional[str]:
+        if not client_path or client_type == 'xq':
             return client_path
+
+        if os.path.isfile(client_path):
+            return client_path
+
         if os.path.isdir(client_path):
-            candidates = []
-            if client_type in ['ths', 'universal_client']:
-                candidates.extend(["xiadan.exe", "hexin.exe", "ths.exe"])
-            if client_type in ['tdx', 'universal_client']:
-                candidates.extend(["TdxW.exe"])
-            
-            for name in candidates:
-                p = os.path.join(client_path, name)
-                if os.path.exists(p):
-                    return p
+            client_map = {
+                'universal_client': 'xiadan.exe',
+                'ths': 'xiadan.exe',
+                'gj_client': 'gjtrader.exe',
+                'htzq_client': 'htzqzyb.exe',
+                'ht_client': 'htsec.exe'
+            }
+
+            exe_name = client_map.get(client_type)
+
+            if exe_name:
+                exe_path = os.path.join(client_path, exe_name)
+                if os.path.isfile(exe_path):
+                    return exe_path
+                logging.warning(f"在目录 {client_path} 中未找到 {client_type} 对应的可执行文件 {exe_name}")
+            else:
+                logging.warning(f"未找到 {client_type} 对应的可执行文件配置")
+
         return client_path
 
     @proxy_app.on_event("startup")

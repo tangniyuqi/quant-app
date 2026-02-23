@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 import time
+import os
 import re
 import urllib.request
 import threading
 import json
 import requests
+from typing import Optional
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from easytrader import remoteclient
 
@@ -24,6 +26,34 @@ class QuantTrader:
                 self.log_callback(level, module, str(message))
             except Exception:
                 pass
+
+    def _resolve_client_path(self, client_type: str, client_path: Optional[str]) -> Optional[str]:
+        if not client_path or client_type == 'xq':
+            return client_path
+
+        if os.path.isfile(client_path):
+            return client_path
+
+        if os.path.isdir(client_path):
+            client_map = {
+                'universal_client': 'xiadan.exe',
+                'ths': 'xiadan.exe',
+                'gj_client': 'gjtrader.exe',
+                'htzq_client': 'htzqzyb.exe',
+                'ht_client': 'htsec.exe'
+            }
+
+            exe_name = client_map.get(client_type)
+
+            if exe_name:
+                exe_path = os.path.join(client_path, exe_name)
+                if os.path.isfile(exe_path):
+                    return exe_path
+                self.log(f"在目录 {client_path} 中未找到 {client_type} 对应的可执行文件 {exe_name}", 'WARNING')
+            else:
+                self.log(f"未找到 {client_type} 对应的可执行文件配置", 'WARNING')
+
+        return client_path
 
     def _create_client(self):
         '''
@@ -45,6 +75,7 @@ class QuantTrader:
             if client_type in ['universal_client', 'ths', 'tdx', 'ht']:
                 client_path = server_config.get('client_path')
                 if client_path:
+                    client_path = self._resolve_client_path(client_type, client_path)
                     # 设置默认策略为 Copy (通常更稳定)
                     client.grid_strategy = grid_strategies.Copy
                     client.connect(client_path)
