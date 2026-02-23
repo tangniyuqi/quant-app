@@ -27,26 +27,14 @@ class TrendStrategy(BaseStrategy):
         config = self._parse_config()
         
         # 均线参数
-        self.signal_type = config.get('signalType', 'MA')
+        self.signal_type = config.get('signalType', 'BOTH')
         
-        if self.signal_type == 'MACD':
-            # MACD 模式：快线(12)、慢线(26)、信号线(9)
-            self.macd_fast_period = int(config.get('macdFastPeriod', 12))
-            self.macd_slow_period = int(config.get('macdSlowPeriod', 26))
-            self.macd_signal_period = int(config.get('macdSignalPeriod', 9))
-            
-            # 为了兼容性或避免未定义错误，给 MA 参数赋默认值
-            self.ma_short_period = 5
-            self.ma_long_period = 20
-        else:
-            # MA 模式：短期(5)、长期(20)
-            self.ma_short_period = int(config.get('maShortPeriod', 5))
-            self.ma_long_period = int(config.get('maLongPeriod', 20))
-            
-            # 为了兼容性或避免未定义错误，给 MACD 参数赋默认值
-            self.macd_fast_period = 12
-            self.macd_slow_period = 26
-            self.macd_signal_period = 9
+        # 加载所有参数
+        self.ma_short_period = int(config.get('maShortPeriod', 5))
+        self.ma_long_period = int(config.get('maLongPeriod', 20))
+        self.macd_fast_period = int(config.get('macdFastPeriod', 12))
+        self.macd_slow_period = int(config.get('macdSlowPeriod', 26))
+        self.macd_signal_period = int(config.get('macdSignalPeriod', 9))
         
         # 交易参数
         self.quantity = int(config.get('quantity', 100))
@@ -63,7 +51,7 @@ class TrendStrategy(BaseStrategy):
         # 高级设置
         self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
         self.enable_real_trade = bool(config.get('enableRealTrade', True))
-        self.monitor_interval = int(config.get('monitorInterval', 60))
+        self.monitor_interval = int(config.get('monitorInterval', 300))
 
         # 任务有效期
         self.expiration_time = None
@@ -92,21 +80,12 @@ class TrendStrategy(BaseStrategy):
     
     def _validate_config(self):
         """校验配置参数的合法性"""
-        if self.signal_type == 'MACD':
-            if self.macd_fast_period >= self.macd_slow_period:
-                self.log(
-                    f"配置错误: MACD快慢周期({self.macd_fast_period}/{self.macd_slow_period})设置不合理(快线需小于慢线)，"
-                    f"已重置为默认值 12/26", 
-                    "WARNING"
-                )
-                self.macd_fast_period = 12
-                self.macd_slow_period = 26
-            
-            if self.macd_signal_period < 1:
-                self.log(f"配置错误: MACD信号线周期({self.macd_signal_period})必须大于等于1，已重置为9", "WARNING")
-                self.macd_signal_period = 9
+        if self.signal_type not in ["MA", "MACD", "BOTH"]:
+            self.log(f"配置错误: 信号方式({self.signal_type})无效，已重置为BOTH", "WARNING")
+            self.signal_type = "BOTH"
 
-        elif self.signal_type == 'MA':
+        # 校验 MA 参数
+        if self.signal_type in ['MA', 'BOTH']:
             if self.ma_short_period >= self.ma_long_period:
                 self.log(
                     f"配置错误: MA短长周期({self.ma_short_period}/{self.ma_long_period})设置不合理(短期需小于长期)，"
@@ -116,13 +95,19 @@ class TrendStrategy(BaseStrategy):
                 self.ma_short_period = 5
                 self.ma_long_period = 20
 
-        if self.signal_type not in ["MA", "MACD"]:
-            self.log(f"配置错误: 信号方式({self.signal_type})无效，已重置为MA", "WARNING")
-            self.signal_type = "MA"
-            # 重置为 MA 后再次校验 MA 参数
-            if self.ma_short_period >= self.ma_long_period:
-                 self.ma_short_period = 5
-                 self.ma_long_period = 20
+        # 校验 MACD 参数
+        if self.signal_type in ['MACD', 'BOTH']:
+            if self.macd_fast_period >= self.macd_slow_period:
+                self.log(
+                    f"配置错误: MACD快慢周期({self.macd_fast_period}/{self.macd_slow_period})设置不合理(快线需小于慢线)，"
+                    f"已重置为默认值 12/26", 
+                    "WARNING"
+                )
+                self.macd_fast_period = 12
+                self.macd_slow_period = 26
+            if self.macd_signal_period < 1:
+                self.log(f"配置错误: MACD信号线周期({self.macd_signal_period})必须大于等于1，已重置为9", "WARNING")
+                self.macd_signal_period = 9
             
         if self.quantity < 100:
             self.log(f"交易数量({self.quantity})小于最小值100，已调整为100", "WARNING")
@@ -555,6 +540,8 @@ class TrendStrategy(BaseStrategy):
         mode_str = "实盘交易" if self.enable_real_trade else "模拟演示 (仅日志)"
         if self.signal_type == "MACD":
             signal_desc = f"MACD({self.macd_fast_period}/{self.macd_slow_period}/{self.macd_signal_period})"
+        elif self.signal_type == "BOTH":
+            signal_desc = f"MA({self.ma_short_period}/{self.ma_long_period}) + MACD({self.macd_fast_period}/{self.macd_slow_period}/{self.macd_signal_period})"
         else:
             signal_desc = f"MA{self.ma_short_period}/MA{self.ma_long_period}"
         direction_map = {0: "双向", 1: "只买", 2: "只卖"}
@@ -599,10 +586,16 @@ class TrendStrategy(BaseStrategy):
                     is_paused = False
                 
                 # 1. 获取K线数据
+                req_ma = self.ma_long_period + 1
+                req_macd = max(self.macd_fast_period, self.macd_slow_period) + self.macd_signal_period + 5
+                
                 if self.signal_type == "MACD":
-                    required_len = max(self.macd_fast_period, self.macd_slow_period) + self.macd_signal_period + 5
+                    required_len = req_macd
+                elif self.signal_type == "BOTH":
+                    required_len = max(req_ma, req_macd)
                 else:
-                    required_len = self.ma_long_period + 1
+                    required_len = req_ma
+                    
                 datalen = required_len + 10
                 closes = self.fetch_kline(self.sina_symbol, scale=self.timeframe, datalen=datalen)
                 
@@ -614,23 +607,11 @@ class TrendStrategy(BaseStrategy):
                 current_price = closes[-1]
                 
                 # 2. 计算技术指标
-                if self.signal_type == "MACD":
-                    diff, dea, prev_diff, prev_dea = self.calculate_macd(
-                        closes, self.macd_fast_period, self.macd_slow_period, self.macd_signal_period
-                    )
-                    if None in (diff, dea, prev_diff, prev_dea):
-                        self.log("MACD计算失败", "WARNING")
-                        time.sleep(self.monitor_interval)
-                        continue
-                    self.log(
-                        f"价格: {current_price:.2f} | "
-                        f"DIFF: {diff:.4f} | "
-                        f"DEA: {dea:.4f}"
-                    )
-                    golden_cross, death_cross = self._check_cross_signal(
-                        diff, dea, prev_diff, prev_dea
-                    )
-                else:
+                golden_cross = False
+                death_cross = False
+                
+                # 计算 MA
+                if self.signal_type in ["MA", "BOTH"]:
                     short_ma = self.calculate_ma(closes, self.ma_short_period)
                     long_ma = self.calculate_ma(closes, self.ma_long_period)
                     prev_short_ma = self.calculate_ma(closes[:-1], self.ma_short_period)
@@ -640,15 +621,49 @@ class TrendStrategy(BaseStrategy):
                         self.log("均线计算失败", "WARNING")
                         time.sleep(self.monitor_interval)
                         continue
-                    
+                        
                     self.log(
                         f"价格: {current_price:.2f} | "
                         f"MA{self.ma_short_period}: {short_ma:.2f} | "
                         f"MA{self.ma_long_period}: {long_ma:.2f}"
                     )
-                    golden_cross, death_cross = self._check_cross_signal(
-                        short_ma, long_ma, prev_short_ma, prev_long_ma
+                    ma_golden, ma_death = self._check_cross_signal(short_ma, long_ma, prev_short_ma, prev_long_ma)
+                    
+                    if self.signal_type == "MA":
+                        golden_cross = ma_golden
+                        death_cross = ma_death
+
+                # 计算 MACD
+                if self.signal_type in ["MACD", "BOTH"]:
+                    diff, dea, prev_diff, prev_dea = self.calculate_macd(
+                        closes, self.macd_fast_period, self.macd_slow_period, self.macd_signal_period
                     )
+                    if None in (diff, dea, prev_diff, prev_dea):
+                        self.log("MACD计算失败", "WARNING")
+                        time.sleep(self.monitor_interval)
+                        continue
+                        
+                    self.log(f"MACD: D={diff:.3f}/A={dea:.3f}")
+                    macd_golden, macd_death = self._check_cross_signal(diff, dea, prev_diff, prev_dea)
+                    
+                    if self.signal_type == "MACD":
+                        golden_cross = macd_golden
+                        death_cross = macd_death
+                
+                # BOTH 模式的信号逻辑
+                if self.signal_type == "BOTH":
+                    # 买入：MA金叉 且 (MACD多头 或 MACD金叉)
+                    # 或者 MACD金叉 且 (MA多头 或 MA金叉)
+                    ma_bullish = short_ma > long_ma
+                    macd_bullish = diff > dea
+                    
+                    if (ma_golden and macd_bullish) or (macd_golden and ma_bullish):
+                         golden_cross = True
+                         self.log("触发双重共振买入信号", "INFO")
+                    
+                    if ma_death or macd_death:
+                        death_cross = True
+                        self.log("触发止损/死叉卖出信号", "INFO")
                 
                 # 3. 同步持仓状态
                 position = self._sync_position()
