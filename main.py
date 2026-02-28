@@ -87,7 +87,7 @@ def WebViewApp(ifDev=False, ifCef=False):
     guiCEF = 'cef' if ifCef else None
 
     # 启动窗口
-    webview.start(debug=Config.devEnv, http_server=True, gui=guiCEF)
+    webview.start(debug=Config.devEnv, http_server=True, gui=guiCEF, private_mode=False, storage_path=Config.appDataDir)
 
 
 if __name__ == "__main__":
