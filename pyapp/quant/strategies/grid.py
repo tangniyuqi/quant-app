@@ -648,6 +648,8 @@ class GridStrategy(BaseStrategy):
                         # 检查持仓
                         pos = self.trader.get_position(stock_code)
                         available = pos.get('available_quantity', 0)
+                        # 调试信息：打印持仓详情
+                        self.log(f"任务({id})持仓详情: {pos}", "DEBUG")
                         
                         if available >= trade_vol:
                             reason = f"任务: {name}({id})\n原因: 上涨触发"
@@ -657,7 +659,7 @@ class GridStrategy(BaseStrategy):
                                 self._save_trade_record("sell", current_price, trade_vol, f"Grid Sell {curr_index}")
                                 self._update_task_position(stock_code)
                                 update_trade_state(current_price, curr_index)
-                                if sell_triggered_by_fallback:
+                                if sell_triggered_by_fallback  :
                                     waiting_for_fallback = False
                                     peak_price = 0
                             elif not res:

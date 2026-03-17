@@ -55,7 +55,7 @@ def WebViewApp(ifDev=False, ifCef=False):
         # 生产环境
         # MAIN_DIR = os.path.join(".", "web")
         # template = os.path.join(MAIN_DIR, "index.html")    # 设置页面，指向本地
-        MAIN_DIR = f'https://go.noooya.com/'
+        MAIN_DIR = f'https://go.noooya.com/#/quant'
         template = os.path.join(MAIN_DIR)    # 设置页面，指向远程
 
         # 修复某些情况下，打包后软件打开白屏的问题
