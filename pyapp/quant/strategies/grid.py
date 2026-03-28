@@ -2,7 +2,7 @@
 import time
 import threading
 import json
-import requests
+import httpx
 import math
 import datetime
 from ..base import BaseStrategy
@@ -342,7 +342,7 @@ class GridStrategy(BaseStrategy):
                         self.log(f"任务({id})自动建仓失败：资金不足(需{need_cash}, 有{available_balance})", "WARNING")
 
         # 优化：重用会话
-        self.session = requests.Session()
+        self.session = httpx.Client()
 
         # 初始更新持仓
         self._update_task_position(stock_code)
@@ -936,7 +936,7 @@ class GridStrategy(BaseStrategy):
             if hasattr(self, 'session'):
                 self.session.put(url, json=data, headers=headers, timeout=5)
             else:
-                requests.put(url, json=data, headers=headers, timeout=5)
+                httpx.put(url, json=data, headers=headers, timeout=5)
             
             # 通知前端刷新交易任务
             self.log("TRADE_TASK_UPDATE_TRIGGER")
@@ -988,7 +988,7 @@ class GridStrategy(BaseStrategy):
             if hasattr(self, 'session'):
                 self.session.post(url, json=data, headers=headers, timeout=5)
             else:
-                requests.post(url, json=data, headers=headers, timeout=5)
+                httpx.post(url, json=data, headers=headers, timeout=5)
             
             # 通知前端刷新交易记录
             self.log("TRADE_RECORD_UPDATE_TRIGGER")

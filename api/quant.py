@@ -96,3 +96,37 @@ class QuantAPI:
             return {'success': success, 'msg': msg}
         except Exception as e:
             return {'success': False, 'msg': str(e)}
+
+    def quant_queryWencai(self, params):
+        '''问财选股查询'''
+        try:
+            import pywencai
+            import pandas as pd
+            query = params.get('query', '')
+            if not query:
+                return {'code': 400, 'msg': '查询条件不能为空'}
+            
+            pro = params.get('pro', False)
+            cookie = params.get('cookie', None)
+
+            kwargs = {'query': query, 'pro': pro, 'cookie': cookie, 'loop': True}
+            
+            df = pywencai.get(**kwargs)
+            if df is None or (isinstance(df, pd.DataFrame) and df.empty):
+                return {'code': 0, 'data': [], 'msg': '没有找到符合条件的股票'}
+            
+            if isinstance(df, pd.DataFrame):
+                # 将 DataFrame 中的 NaN 替换为 None，便于 JSON 序列化
+                df = df.where(pd.notnull(df), None)
+                data = df.to_dict('records')
+            elif isinstance(df, dict):
+                data = df
+            else:
+                data = str(df)
+            
+            return {'code': 0, 'data': data, 'msg': '查询成功'}
+            
+        except ImportError:
+            return {'code': 500, 'msg': '缺少pywc模块，请先安装'}
+        except Exception as e:
+            return {'code': 500, 'msg': f'查询异常: {str(e)}'}

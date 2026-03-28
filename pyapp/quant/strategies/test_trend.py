@@ -197,7 +197,7 @@ class TestTrendStrategy(unittest.TestCase):
         self.assertEqual(ts, '600519.SH')
         self.assertEqual(sina, 'sh600519')
 
-    @patch('requests.get')
+    @patch('httpx.get')
     def test_fetch_kline(self, mock_get):
         """测试K线获取"""
         mock_resp = MagicMock()

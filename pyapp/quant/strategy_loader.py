@@ -2,7 +2,7 @@
 import os
 import sys
 import importlib
-import requests
+import httpx
 import logging
 
 # 配置日志
@@ -63,7 +63,7 @@ class StrategyLoader:
             
             # 下载文件
             # 设置超时时间，避免卡死
-            response = requests.get(url, timeout=15)
+            response = httpx.get(url, timeout=15)
             if response.status_code != 200:
                 return False, f"下载失败，状态码: {response.status_code}"
             

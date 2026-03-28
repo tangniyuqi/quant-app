@@ -17,6 +17,7 @@ requests==2.32.5
 easyquotation==0.7.7
 easytrader==0.23.7
 tushare==1.4.24
+pywencai
 
 # --- Database & Security ---
 cryptography==46.0.3

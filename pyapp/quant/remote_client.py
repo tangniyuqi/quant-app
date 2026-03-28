@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-import requests
+import httpx
 
 class RemoteClient:
     def __init__(self):
         self.host = '127.0.0.1'
         self.port = 14300
-        self.session = requests.Session()
+        self.session = httpx.Client()
         self.base_url = f"http://{self.host}:{self.port}"
 
     def connect(self, host, port):

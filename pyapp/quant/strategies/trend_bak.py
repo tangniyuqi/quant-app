@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import time
 import json
-import requests
+import httpx
 import datetime
 from ..base import BaseStrategy
 
@@ -40,7 +40,7 @@ class TrendStrategy(BaseStrategy):
         """
         try:
             url = f"http://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={symbol}&scale={scale}&ma=no&datalen={datalen}"
-            resp = requests.get(url, timeout=5)
+            resp = httpx.get(url, timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 # 解析收盘价

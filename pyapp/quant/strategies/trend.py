@@ -9,7 +9,7 @@
 import time
 import json
 import datetime
-import requests
+import httpx
 from typing import Optional, Dict, List, Tuple
 from ..base import BaseStrategy
 
@@ -199,7 +199,7 @@ class TrendStrategy(BaseStrategy):
                 f"?symbol={symbol}&scale={scale}&ma=no&datalen={datalen}"
             )
             
-            resp = requests.get(url, timeout=10)
+            resp = httpx.get(url, timeout=10)
             resp.raise_for_status()
             
             data = resp.json()
@@ -210,7 +210,7 @@ class TrendStrategy(BaseStrategy):
             closes = [float(item['close']) for item in data]
             return closes
             
-        except requests.RequestException as e:
+        except httpx.RequestError as e:
             self.log(f"获取K线数据失败: {e}", "ERROR")
             return []
         except (KeyError, ValueError, TypeError) as e:
@@ -503,7 +503,7 @@ class TrendStrategy(BaseStrategy):
         }
         
         try:
-            requests.post(url, json=data, headers=headers, timeout=5)
+            httpx.post(url, json=data, headers=headers, timeout=5)
             self.log("TRADE_RECORD_UPDATE_TRIGGER")
         except Exception:
             pass

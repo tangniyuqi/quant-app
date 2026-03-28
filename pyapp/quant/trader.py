@@ -5,7 +5,7 @@ import re
 import urllib.request
 import threading
 import json
-import requests
+import httpx
 from typing import Optional
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from easytrader import remoteclient
@@ -499,7 +499,7 @@ class QuantTrader:
                     'x-token': self.token,
                     'Content-Type': 'application/json'
                 }
-                response = requests.put(url, json=data, headers=headers, timeout=5)
+                response = httpx.put(url, json=data, headers=headers, timeout=5)
                 if response.status_code != 200:
                     print(f"[{time.strftime('%H:%M:%S')}] 资产上报失败: {response.status_code} {response.text}")
                 else:
@@ -595,7 +595,7 @@ class QuantTrader:
                     'msg_type': 'interactive',
                     'card': card_content
                 }
-                requests.post(self.webhook_url, json=data, headers=headers, timeout=5)
+                httpx.post(self.webhook_url, json=data, headers=headers, timeout=5)
             
         except Exception as e:
             self.log(f'发送通知失败：{e}', 'ERROR')
