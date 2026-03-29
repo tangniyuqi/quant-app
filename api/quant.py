@@ -117,7 +117,7 @@ class QuantAPI:
             try:
                 df = pywencai.get(**kwargs)
             except RuntimeError as e:
-                # 补丁抛出的运行时错误（Node.js 或 JS 文件问题）
+                # 补丁抛出的运行时错误（Node.js或JS文件问题）
                 return {'code': 500, 'msg': str(e)}
             except AttributeError as e:
                 return {'code': 500, 'msg': f'AI接口调用失败，请稍后重试: {str(e)}'}
