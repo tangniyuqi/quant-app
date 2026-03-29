@@ -30,9 +30,18 @@ logoExt = 'icns' if ifMac else 'png' if ifLinux else 'ico'
 
 # 添加文件到打包中
 addDll = ''
-# 添加文件夹到打包中
-addModules = "('../../gui/dist', 'web'), ('../../static', 'static')"
 
+# 添加文件夹到打包中
+# 需要将 pywencai 的 JS 文件打包进去
+try:
+    import pywencai
+    pywencai_path = os.path.dirname(pywencai.__file__)
+    # 使用转义的路径字符串
+    pywencai_path_escaped = pywencai_path.replace('\\', '\\\\')
+    addModules = f"('../../gui/dist', 'web'), ('../../static', 'static'), ('{pywencai_path_escaped}', 'pywencai')"
+except ImportError:
+    # 如果 pywencai 未安装，只打包基本文件
+    addModules = "('../../gui/dist', 'web'), ('../../static', 'static')"
 
 # spec配置文件 前半部分通用格式
 def specFirstPart():

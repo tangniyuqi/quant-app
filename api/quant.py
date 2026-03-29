@@ -8,9 +8,11 @@ Description: 业务层API，供前端JS调用
 usage: 在Javascript中调用window.pywebview.api.<methodname>(<parameters>)
 '''
 
-import json
 import os
-import sys
+import shutil
+import subprocess
+import platform
+import json
 from api.system import System
 from pyapp.quant.manager import TaskManager
 from pyapp.quant.service_manager import ServiceManager
@@ -100,21 +102,35 @@ class QuantAPI:
     def quant_queryWencai(self, params):
         '''问财选股查询'''
         try:
-            import pywencai
             import pandas as pd
+            import pywencai
+
             query = params.get('query', '')
             if not query:
                 return {'code': 400, 'msg': '查询条件不能为空'}
-            
+
             pro = params.get('pro', False)
             cookie = params.get('cookie', None)
 
-            kwargs = {'query': query, 'pro': pro, 'cookie': cookie, 'loop': True}
-            
-            df = pywencai.get(**kwargs)
-            if df is None or (isinstance(df, pd.DataFrame) and df.empty):
+            kwargs = {'query': query, 'pro': pro, 'cookie': cookie, 'loop': False}
+
+            try:
+                df = pywencai.get(**kwargs)
+            except RuntimeError as e:
+                # 补丁抛出的运行时错误（Node.js 或 JS 文件问题）
+                return {'code': 500, 'msg': str(e)}
+            except AttributeError as e:
+                return {'code': 500, 'msg': f'AI接口调用失败，请稍后重试: {str(e)}'}
+            except Exception as e:
+                return {'code': 500, 'msg': f'查询失败: {str(e)}'}
+
+            # 检查返回值是否为 None
+            if df is None:
+                return {'code': 500, 'msg': 'AI接口返回空值，请稍后重试'}
+
+            if isinstance(df, pd.DataFrame) and df.empty:
                 return {'code': 0, 'data': [], 'msg': '没有找到符合条件的股票'}
-            
+
             if isinstance(df, pd.DataFrame):
                 # 将 DataFrame 中的 NaN 替换为 None，便于 JSON 序列化
                 df = df.where(pd.notnull(df), None)
@@ -123,10 +139,10 @@ class QuantAPI:
                 data = df
             else:
                 data = str(df)
-            
+
             return {'code': 0, 'data': data, 'msg': '查询成功'}
-            
-        except ImportError:
-            return {'code': 500, 'msg': '缺少pywc模块，请先安装'}
+
+        except ImportError as e:
+            return {'code': 500, 'msg': f'缺少组件: {str(e)}'}
         except Exception as e:
             return {'code': 500, 'msg': f'查询异常: {str(e)}'}

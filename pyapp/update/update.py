@@ -25,8 +25,8 @@ class AppUpdate:
     def check(self):
         '''检查是否有更新：0=>有新版本; -1=>联网失败; 1=>已经是最新版本'''
         resNewInfo = self.__getNewInfo()
-        print(resNewInfo)
-        print(self.__compareVersion(Config.appVersion, resNewInfo['version']))
+        # print(resNewInfo)
+        # print(self.__compareVersion(Config.appVersion, resNewInfo['version']))
         if not resNewInfo['status']:
             # 联网失败
             return {'code': -1, 'msg': '连接服务器失败，请稍后再试'}

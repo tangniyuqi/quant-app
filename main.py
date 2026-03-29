@@ -15,6 +15,13 @@ from api.api import API
 from pyapp.config.config import Config
 from pyapp.db.db import DB
 
+# 应用pywencai补丁（用于打包环境）
+try:
+    from pyapp.patch.pywencai_patch import apply_patch
+    apply_patch()
+except Exception:
+    pass
+
 # 关闭 pywebview 的日志
 logger = logging.getLogger('pywebview')
 logger.setLevel(logging.ERROR)  # 仅保留错误级日志
