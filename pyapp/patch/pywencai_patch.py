@@ -76,29 +76,29 @@ def patched_get_token():
     """修补后的 get_token 函数"""
     node_path = get_node_path()
     if not node_path:
-        raise RuntimeError('未找到 Node.js，请确保已安装 Node.js')
+        raise RuntimeError('未找到Nodejs，请确保已安装Nodejs')
     
     js_file = get_js_file_path()
     if not js_file:
-        raise RuntimeError('未找到 hexin-v.bundle.js 文件')
+        raise RuntimeError('未找到hexin-v.bundle.js文件')
     
     try:
         result = subprocess.run(
             [node_path, js_file],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=10
+            timeout=120
         )
         
         if result.returncode != 0:
             error_msg = result.stderr.decode().strip()
-            raise RuntimeError(f'Node.js 执行失败: {error_msg}')
+            raise RuntimeError(f'Nodejs执行失败: {error_msg}')
         
         return result.stdout.decode().strip()
     except subprocess.TimeoutExpired:
-        raise RuntimeError('Node.js 执行超时')
+        raise RuntimeError('Nodejs执行超时')
     except Exception as e:
-        raise RuntimeError(f'执行 Node.js 时出错: {str(e)}')
+        raise RuntimeError(f'执行Nodejs时出错: {str(e)}')
 
 
 def apply_patch():

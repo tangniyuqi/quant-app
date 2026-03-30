@@ -109,32 +109,29 @@ class QuantAPI:
             if not query:
                 return {'code': 400, 'msg': '查询条件不能为空'}
 
-            pro = params.get('pro', False)
-            cookie = params.get('cookie', None)
-
-            kwargs = {'query': query, 'pro': pro, 'cookie': cookie, 'loop': False}
+            kwargs = {
+                'query': query,
+                'pro': params.get('pro', False),
+                'cookie': params.get('cookie', None),
+                'loop': 3,
+                'retry': 3
+            }
 
             try:
                 df = pywencai.get(**kwargs)
-            except RuntimeError as e:
-                # 补丁抛出的运行时错误（Node.js或JS文件问题）
-                return {'code': 500, 'msg': str(e)}
-            except AttributeError as e:
-                return {'code': 500, 'msg': f'AI接口调用失败，请稍后重试: {str(e)}'}
             except Exception as e:
-                return {'code': 500, 'msg': f'查询失败: {str(e)}'}
-
-            # 检查返回值是否为 None
-            if df is None:
-                return {'code': 500, 'msg': 'AI接口返回空值，请稍后重试'}
-
-            if isinstance(df, pd.DataFrame) and df.empty:
-                return {'code': 0, 'data': [], 'msg': '没有找到符合条件的股票'}
+                error_msg = str(e)
+                # AttributeError 特殊提示
+                if isinstance(e, AttributeError):
+                    return {'code': 500, 'msg': f'AI接口调用失败，请稍后重试: {error_msg}'}
+                # 其他错误
+                return {'code': 500, 'msg': f'查询失败: {error_msg}'}
 
             if isinstance(df, pd.DataFrame):
-                # 将 DataFrame 中的 NaN 替换为 None，便于 JSON 序列化
-                df = df.where(pd.notnull(df), None)
-                data = df.to_dict('records')
+                if df.empty:
+                    return {'code': 0, 'data': [], 'msg': '没有找到符合条件的股票'}
+                # 将 NaN 替换为 None，便于 JSON 序列化
+                data = df.where(pd.notnull(df), None).to_dict('records')
             elif isinstance(df, dict):
                 data = df
             else:
