@@ -120,13 +120,18 @@ class QuantAPI:
             try:
                 df = pywencai.get(**kwargs)
             except RuntimeError as e:
+                error_msg = str(e)
                 if 'Nodejs' in error_msg or 'hexin-v.bundle.js' in error_msg:
-                    return {'code': 500, 'msg': str(e)}
-                return {'code': 500, 'msg': f'查询失败: {str(e)}'}
+                    return {'code': 500, 'msg': error_msg}
+                return {'code': 500, 'msg': f'查询失败: {error_msg}'}
             except AttributeError as e:
                 return {'code': 500, 'msg': f'调用失败: {str(e)}'}
             except Exception as e:
                 return {'code': 500, 'msg': f'查询异常: {str(e)}'}
+
+            # 检查返回值是否为 None
+            if df is None:
+                return {'code': 500, 'msg': '查询失败: pywencai 返回空值，可能是 Node.js 环境问题'}
 
             if isinstance(df, pd.DataFrame):
                 if df.empty:
@@ -144,3 +149,12 @@ class QuantAPI:
             return {'code': 500, 'msg': f'缺少组件: {str(e)}'}
         except Exception as e:
             return {'code': 500, 'msg': f'查询异常: {str(e)}'}
+
+    def quant_diagnoseWencai(self):
+        '''诊断问财环境配置'''
+        try:
+            from pyapp.patch.pywencai_patch import diagnose
+            result = diagnose()
+            return {'code': 0, 'data': result, 'msg': '诊断完成'}
+        except Exception as e:
+            return {'code': 500, 'msg': f'诊断失败: {str(e)}'}
