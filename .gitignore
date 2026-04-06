@@ -9,6 +9,10 @@ pnpm-lock.yaml
 pyapp/pyenv
 pyapp/spec/*
 !pyapp/spec/getSpec.py
+.claude
+.kiro
+.opencode
+.trea
 .vscode/*
 .idea
 .DS_Store
