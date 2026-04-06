@@ -90,7 +90,7 @@ def patched_get_token():
     
     js_file = get_js_file_path()
     if not js_file:
-        raise RuntimeError('未找到 hexin-v.bundle.js 文件，请检查 pywencai 是否正确打包')
+        raise RuntimeError('未找到 hexin-v.bundle.js 文件，请检查是否正确打包')
     
     try:
         # Windows 下隐藏控制台窗口

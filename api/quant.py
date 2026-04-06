@@ -121,17 +121,21 @@ class QuantAPI:
                 df = pywencai.get(**kwargs)
             except RuntimeError as e:
                 error_msg = str(e)
-                if 'Nodejs' in error_msg or 'hexin-v.bundle.js' in error_msg:
-                    return {'code': 500, 'msg': error_msg}
-                return {'code': 500, 'msg': f'查询失败: {error_msg}'}
+                if 'Node.js' in error_msg or 'hexin-v.bundle.js' in error_msg:
+                    return {'code': 500, 'msg': f'执行错误: Node.js 问题，{error_msg}'}
+                return {'code': 500, 'msg': f'执行错误: {error_msg}'}
             except AttributeError as e:
-                return {'code': 500, 'msg': f'调用失败: {str(e)}'}
+                # pywencai 内部可能因为 Node.js 问题返回 None，导致 AttributeError
+                error_msg = str(e)
+                if "'NoneType' object has no attribute" in error_msg:
+                    return { 'code': 500, 'msg': '运行错误: Node.js 问题，请确保已安装'}
+                return {'code': 500, 'msg': f'调用失败: {error_msg}'}
             except Exception as e:
                 return {'code': 500, 'msg': f'查询异常: {str(e)}'}
 
             # 检查返回值是否为 None
             if df is None:
-                return {'code': 500, 'msg': '查询失败: pywencai 返回空值，可能是 Node.js 环境问题'}
+                return { 'code': 500, 'msg': '查询失败: 返回空值，Node.js 问题或网络错误'}
 
             if isinstance(df, pd.DataFrame):
                 if df.empty:
