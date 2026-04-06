@@ -119,17 +119,18 @@ class QuantAPI:
 
             try:
                 df = pywencai.get(**kwargs)
+            except RuntimeError as e:
+                if 'Nodejs' in error_msg or 'hexin-v.bundle.js' in error_msg:
+                    return {'code': 500, 'msg': str(e)}
+                return {'code': 500, 'msg': f'查询失败: {str(e)}'}
+            except AttributeError as e:
+                return {'code': 500, 'msg': f'调用失败: {str(e)}'}
             except Exception as e:
-                error_msg = str(e)
-                # AttributeError 特殊提示
-                if isinstance(e, AttributeError):
-                    return {'code': 500, 'msg': f'AI接口调用失败，请稍后重试: {error_msg}'}
-                # 其他错误
-                return {'code': 500, 'msg': f'查询失败: {error_msg}'}
+                return {'code': 500, 'msg': f'查询异常: {str(e)}'}
 
             if isinstance(df, pd.DataFrame):
                 if df.empty:
-                    return {'code': 0, 'data': [], 'msg': '没有找到符合条件的股票'}
+                    return {'code': 0, 'data': [], 'msg': '没有找到符合条件的数据'}
                 # 将 NaN 替换为 None，便于 JSON 序列化
                 data = df.where(pd.notnull(df), None).to_dict('records')
             elif isinstance(df, dict):

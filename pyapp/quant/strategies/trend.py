@@ -26,6 +26,17 @@ class TrendStrategy(BaseStrategy):
         """初始化策略配置参数"""
         config = self._parse_config()
         
+        # 缓存解析后的股票信息
+        stock_info = self.data.get('task', {}).get('stock', {})
+        if isinstance(stock_info, str):
+            try:
+                stock_info = json.loads(stock_info)
+            except json.JSONDecodeError:
+                stock_info = {}
+        if not isinstance(stock_info, dict):
+            stock_info = {}
+        self.stock_info = stock_info
+        
         # 均线参数
         self.signal_type = config.get('signalType', 'BOTH')
         
@@ -52,6 +63,8 @@ class TrendStrategy(BaseStrategy):
         self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
         self.enable_real_trade = bool(config.get('enableRealTrade', True))
         self.monitor_interval = int(config.get('monitorInterval', 300))
+        self.cooldown_seconds = int(config.get('cooldownSeconds', 60))  # 冷却时间，默认60秒
+        self.sell_mode = config.get('sellMode', 'strict')  # 卖出模式：strict(严格) 或 loose(宽松)
 
         # 任务有效期
         self.expiration_time = None
@@ -117,6 +130,10 @@ class TrendStrategy(BaseStrategy):
             self.log(f"轮询间隔({self.monitor_interval}秒)过短，已调整为5秒", "WARNING")
             self.monitor_interval = 5
         
+        if self.cooldown_seconds < 0:
+            self.log(f"冷却时间({self.cooldown_seconds}秒)无效，已重置为60秒", "WARNING")
+            self.cooldown_seconds = 60
+        
         if self.stop_loss < 0 or self.stop_loss > 1:
             self.log(f"止损比例({self.stop_loss * 100:.2f}%)超出范围，已重置为0", "WARNING")
             self.stop_loss = 0
@@ -145,6 +162,10 @@ class TrendStrategy(BaseStrategy):
         if self.ratio < 0 or self.ratio > 1:
             self.log(f"仓位比例({self.ratio * 100:.2f}%)无效，已重置为5%", "WARNING")
             self.ratio = 0.05
+        
+        if self.sell_mode not in ["strict", "loose"]:
+            self.log(f"卖出模式({self.sell_mode})无效，已重置为严格模式", "WARNING")
+            self.sell_mode = "strict"
             
     def _init_position_state(self):
         """初始化持仓状态"""
@@ -159,15 +180,8 @@ class TrendStrategy(BaseStrategy):
         """
         解析股票信息
         返回: (ts_code, sina_symbol)
-        """
-        stock_info = self.data.get('task', {}).get('stock', {})
-        if isinstance(stock_info, str):
-            try:
-                stock_info = json.loads(stock_info)
-            except json.JSONDecodeError:
-                return None, None
-        
-        ts_code = stock_info.get('ts_code', '')
+        """        
+        ts_code = self.stock_info.get('ts_code', '')
         if not ts_code:
             return None, None
             
@@ -272,23 +286,20 @@ class TrendStrategy(BaseStrategy):
         prev_dea = dea_series[-2] if len(dea_series) >= 2 else None
         return diff, dea, prev_diff, prev_dea
     
-    def _sync_position(self) -> Optional[Dict]:
+    def _get_position(self) -> Optional[Dict]:
         """
-        同步持仓信息
-        
-        返回:
-            持仓信息字典，无持仓时返回None
+        获取持仓信息
         """
         if not self.connect_trader:
             return None
             
         try:
-            positions = self.trader.get_positions()
-            stock_code_base = self.stock_code.split('.')[0] if self.stock_code else None
+            if not self.stock_code:
+                return None
             
-            for pos in positions:
-                if pos.get('stock_code') == stock_code_base:
-                    return pos
+            stock_code = self.stock_code.split('.')[0]
+            position = self.trader.get_position(stock_code)
+            return position if position else None
                     
         except Exception as e:
             self.log(f"获取持仓信息失败: {e}", "WARNING")
@@ -303,8 +314,8 @@ class TrendStrategy(BaseStrategy):
             position: 持仓信息
             current_price: 当前价格
         """
-        # API 延迟保护：如果刚买入（60秒内），且 API 未返回持仓，暂时信任本地状态
-        if self.holding and self.entry_time and (time.time() - self.entry_time < 60):
+        # API 延迟保护：如果刚买入（30秒内），且 API 未返回持仓，暂时信任本地状态
+        if self.holding and self.entry_time and (time.time() - self.entry_time < 30):
             if not position or float(position.get('volume', 0)) <= 0:
                 self.log("API未同步持仓，保持本地持仓状态", "INFO")
                 return
@@ -351,12 +362,12 @@ class TrendStrategy(BaseStrategy):
         # 计算盈亏比例
         profit_ratio = (current_price - self.entry_price) / self.entry_price
         
-        # 止损检查
-        if self.stop_loss > 0 and profit_ratio < -self.stop_loss:
+        # 止损优先检查（使用 <= 确保边界情况也触发）
+        if self.stop_loss > 0 and profit_ratio <= -self.stop_loss:
             return True, f"止损(设定{self.stop_loss*100:.1f}%, 实际{profit_ratio*100:.2f}%)"
         
-        # 止盈检查
-        if self.take_profit > 0 and profit_ratio > self.take_profit:
+        # 止盈检查（使用 >= 确保边界情况也触发）
+        if self.take_profit > 0 and profit_ratio >= self.take_profit:
             return True, f"止盈(设定{self.take_profit*100:.1f}%, 实际{profit_ratio*100:.2f}%)"
         
         return False, ""
@@ -395,9 +406,8 @@ class TrendStrategy(BaseStrategy):
             
             return max(0, int(quantity))
         
-        if position is None and self.stock_code:
-            stock_code_base = self.stock_code.split('.')[0]
-            position = self.trader.get_position(stock_code_base)
+        if position is None:
+            position = self._get_position()
         
         if position:
             available = position.get('available_quantity', 0) or position.get('total_quantity', 0)
@@ -412,6 +422,7 @@ class TrendStrategy(BaseStrategy):
         if self.connect_trader and self.enable_real_trade:
             try:
                 self.trader.buy(self.stock_code, price=price, amount=quantity)
+                # 只有交易成功后才更新状态
                 self.holding = True
                 self.entry_price = price
                 self.entry_time = time.time()
@@ -420,6 +431,8 @@ class TrendStrategy(BaseStrategy):
                 self._save_trade_record("buy", price, quantity, "金叉")
             except Exception as e:
                 self.log(f"买入失败: {e}", "ERROR")
+                # 失败时不更新状态，直接返回
+                return
         else:
             # 模拟交易或未开启实盘
             mode = "模拟" if not self.connect_trader else "实盘禁用"
@@ -441,6 +454,7 @@ class TrendStrategy(BaseStrategy):
         if self.connect_trader and self.enable_real_trade:
             try:
                 self.trader.sell(self.stock_code, price=price, amount=quantity)
+                # 只有交易成功后才更新状态
                 self.holding = False
                 self.entry_price = 0.0
                 self.entry_time = None
@@ -449,6 +463,8 @@ class TrendStrategy(BaseStrategy):
                 self._save_trade_record("sell", price, quantity, reason)
             except Exception as e:
                 self.log(f"卖出失败: {e}", "ERROR")
+                # 卖出失败时不更新状态，但记录错误
+                return
         else:
             # 模拟交易或未开启实盘
             mode = "模拟" if not self.connect_trader else "实盘禁用"
@@ -470,25 +486,14 @@ class TrendStrategy(BaseStrategy):
             backend_url = backend_url[:-1]
             
         url = f"{backend_url}/quant/tradeRecord/createTradeRecord"
-        
-        stock_info = self.data.get('task', {}).get('stock', {})
-        if isinstance(stock_info, str):
-            try:
-                stock_info = json.loads(stock_info)
-            except Exception:
-                stock_info = {}
-        
-        if not isinstance(stock_info, dict):
-            stock_info = {}
-
         account = self.data.get('account', {})
 
         data = {
             "member_id": account.get('member_id'),
             "account_id": account.get('id'),
             "task_id": self.data.get('id'),
-            "symbol": stock_info.get('ts_code', ''),
-            "name": stock_info.get('name', ''),
+            "symbol": self.stock_info.get('ts_code', ''),
+            "name": self.stock_info.get('name', ''),
             "price": float(price),
             "quantity": float(quantity),
             "amount": float(price) * float(quantity),
@@ -541,13 +546,14 @@ class TrendStrategy(BaseStrategy):
         if self.signal_type == "MACD":
             signal_desc = f"MACD({self.macd_fast_period}/{self.macd_slow_period}/{self.macd_signal_period})"
         elif self.signal_type == "BOTH":
-            signal_desc = f"MA({self.ma_short_period}/{self.ma_long_period}) + MACD({self.macd_fast_period}/{self.macd_slow_period}/{self.macd_signal_period})"
+            sell_mode_desc = "严格模式(双重确认)" if self.sell_mode == "strict" else "宽松模式(任一死叉)"
+            signal_desc = f"MA({self.ma_short_period}/{self.ma_long_period}) + MACD({self.macd_fast_period}/{self.macd_slow_period}/{self.macd_signal_period}) [{sell_mode_desc}]"
         else:
             signal_desc = f"MA{self.ma_short_period}/MA{self.ma_long_period}"
         direction_map = {0: "双向", 1: "只买", 2: "只卖"}
         trade_mode_map = {"quantity": "固定股数", "amount": "固定金额", "ratio": "按资金比例"}
         self.log(
-            f"任务({task_id}): 趋势策略启动\n"
+            f"任务({task_id}): 趋势跟踪策略启动\n"
             f"  股票: {self.stock_code}\n"
             f"  信号方式: {signal_desc}\n"
             f"  K线周期: {self.timeframe}分钟\n"
@@ -652,26 +658,40 @@ class TrendStrategy(BaseStrategy):
                 
                 # BOTH 模式的信号逻辑
                 if self.signal_type == "BOTH":
-                    # 买入：MA金叉 且 (MACD多头 或 MACD金叉)
-                    # 或者 MACD金叉 且 (MA多头 或 MA金叉)
+                    # 买入：MA金叉 且 MACD多头，或 MACD金叉 且 MA多头（双重共振）
                     ma_bullish = short_ma > long_ma
                     macd_bullish = diff > dea
                     
                     if (ma_golden and macd_bullish) or (macd_golden and ma_bullish):
-                         golden_cross = True
-                         self.log("触发双重共振买入信号", "INFO")
+                        golden_cross = True
+                        self.log("触发双重共振买入信号", "INFO")
                     
-                    if ma_death or macd_death:
-                        death_cross = True
-                        self.log("触发止损/死叉卖出信号", "INFO")
+                    # 卖出逻辑：根据卖出模式选择
+                    if self.sell_mode == "strict":
+                        # 严格模式：要求双重确认（MA死叉且MACD空头，或 MACD死叉且MA空头）
+                        ma_bearish = short_ma < long_ma
+                        macd_bearish = diff < dea
+                        if (ma_death and macd_bearish) or (macd_death and ma_bearish):
+                            death_cross = True
+                            self.log("触发双重确认卖出信号(严格模式)", "INFO")
+                    else:
+                        # 宽松模式：任一死叉即卖出
+                        if ma_death or macd_death:
+                            death_cross = True
+                            reason = "MA死叉" if ma_death else "MACD死叉"
+                            self.log(f"触发{reason}卖出信号(宽松模式)", "INFO")
                 
                 # 3. 同步持仓状态
-                position = self._sync_position()
+                position = self._get_position()
                 self._update_position_state(position, current_price)
                 
                 # 4. 执行交易逻辑
                 if not self.holding and golden_cross:
-                    if self.trade_direction == 2:
+                    # 检查冷却时间
+                    if time.time() - self.last_trade_time < self.cooldown_seconds:
+                        remaining = int(self.cooldown_seconds - (time.time() - self.last_trade_time))
+                        self.log(f"冷却时间未到，剩余{remaining}秒", "INFO")
+                    elif self.trade_direction == 2:
                         self.log("交易方向限制(只卖)，跳过买入信号", "INFO")
                     else:
                         quantity = self._calculate_trade_quantity('buy', current_price, position)
@@ -685,18 +705,17 @@ class TrendStrategy(BaseStrategy):
                     should_sell = False
                     sell_reason = ""
                     
-                    # 死叉信号
-                    if death_cross:
-                        # 卖出平仓通常不受方向限制，除非是做空策略的平仓。
-                        # 对于现货，只买(1)也需要卖出平仓；只卖(2)本身就是只做卖出。
-                        should_sell = True
-                        sell_reason = "死叉"
-                    
-                    # 止损止盈
+                    # 止损止盈优先检查（风控优先）
                     stop_triggered, stop_reason = self._check_stop_conditions(current_price)
                     if stop_triggered:
                         should_sell = True
                         sell_reason = stop_reason
+                    # 死叉信号
+                    elif death_cross:
+                        # 卖出平仓通常不受方向限制，除非是做空策略的平仓。
+                        # 对于现货，只买(1)也需要卖出平仓；只卖(2)本身就是只做卖出。
+                        should_sell = True
+                        sell_reason = "死叉"
                     
                     if should_sell:
                         # 卖出平仓不受冷却时间限制，防止无法止损

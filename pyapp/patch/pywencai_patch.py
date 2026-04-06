@@ -13,27 +13,37 @@ import shutil
 
 def get_node_path():
     """获取 Node.js 路径"""
-    # 优先使用环境变量
-    if os.environ.get('NODE_PATH'):
-        return os.environ.get('NODE_PATH')
+    import platform
     
-    # 使用 which 查找
+    # 优先使用环境变量
+    node_env = os.environ.get('NODE_PATH')
+    if node_env and os.path.isfile(node_env):
+        return node_env
+    
+    # 使用 which 查找（最可靠的方式）
     node_path = shutil.which('node')
-    if node_path and os.path.isfile(node_path):
+    if node_path:
         return node_path
     
     # 尝试常见路径
-    import platform
     system = platform.system()
+    common_paths = []
     
     if system == 'Windows':
-        common_paths = [
-            r'C:\Program Files\nodejs\node.exe',
-            r'C:\Program Files (x86)\nodejs\node.exe',
-            os.path.join(os.environ.get('ProgramFiles', 'C:\Program Files'), r'nodejs\node.exe'),
-            os.path.join(os.environ.get('APPDATA', ''), r'npm\node.exe'),
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), r'bin\node.exe'),
-        ]
+        # 遍历所有可能的盘符
+        for drive in 'CDEFG':
+            drive_path = f'{drive}:\\'
+            if os.path.exists(drive_path):
+                common_paths.extend([
+                    os.path.join(drive_path, r'Program Files\nodejs\node.exe'),
+                    os.path.join(drive_path, r'Program Files (x86)\nodejs\node.exe'),
+                ])
+        
+        # 用户目录路径
+        if os.environ.get('APPDATA'):
+            common_paths.append(os.path.join(os.environ['APPDATA'], r'npm\node.exe'))
+        if os.environ.get('LOCALAPPDATA'):
+            common_paths.append(os.path.join(os.environ['LOCALAPPDATA'], r'bin\node.exe'))
     else:  # macOS/Linux
         common_paths = [
             '/opt/homebrew/bin/node',
@@ -83,12 +93,18 @@ def patched_get_token():
         raise RuntimeError('未找到hexin-v.bundle.js文件')
     
     try:
-        result = subprocess.run(
-            [node_path, js_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=120
-        )
+        # Windows 下隐藏控制台窗口
+        kwargs = {
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE,
+            'timeout': 120
+        }
+        
+        if platform.system() == 'Windows':
+            # CREATE_NO_WINDOW = 0x08000000
+            kwargs['creationflags'] = 0x08000000
+        
+        result = subprocess.run([node_path, js_file], **kwargs)
         
         if result.returncode != 0:
             error_msg = result.stderr.decode().strip()

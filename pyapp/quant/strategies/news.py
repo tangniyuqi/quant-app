@@ -30,8 +30,9 @@ class NewsStrategy(BaseStrategy):
         self.excluded_keywords = config.get('excludedKeywords', [])
        
         # News Source Config
-        self.monitor_interval = max(1, min(3600, int(config.get('monitorInterval', 10))))  # 限制在1-3600范围内
+        self.monitor_interval = max(1, min(3600, int(config.get('monitorInterval', 60))))  # 限制在1-3600范围内
         self.batch_size = max(1, min(100, int(config.get('batchSize', 10))))  # 限制在1-100范围内
+        self.enableLog = config.get('enableLog', False)  # 是否输出快讯日志
         
         # Notification
         self.enable_feishu = config.get('enableFeishu', False)
@@ -65,7 +66,8 @@ class NewsStrategy(BaseStrategy):
                         news_time = self._format_news_time(news)
                         full_content = f"{news_time} - {content}"
                         
-                        self.log(f"快讯：{content[:50]}...")
+                        if self.enableLog:
+                            self.log(f"快讯：{content[:50]}...")
                             
                         # 3. 推送消息
                         self.send_notifications(full_content)

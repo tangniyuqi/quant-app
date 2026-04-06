@@ -11,6 +11,14 @@ class GridStrategy(BaseStrategy):
     def __init__(self, data, log_callback=None):
         super().__init__(data, log_callback)
         self.log_layer_base = 0.01 # Default
+        
+        # 缓存滑点配置
+        self.slippage_config = {
+            'base_ratio': 0.0,
+            'mode': 1,
+            'max_limit': 0.02  # 默认最大滑点2%
+        }
+        
         self._init_config()
 
     def _init_config(self):
@@ -18,6 +26,18 @@ class GridStrategy(BaseStrategy):
         if isinstance(config, str):
             try: config = json.loads(config)
             except: pass
+        
+        # 缓存解析后的配置
+        self.config = config
+        
+        # 缓存解析后的股票信息
+        stock_info = self.data.get('task', {}).get('stock', {})
+        if isinstance(stock_info, str):
+            try: stock_info = json.loads(stock_info)
+            except: pass
+        if not isinstance(stock_info, dict):
+            stock_info = {}
+        self.stock_info = stock_info
         
         layer_percent = float(config.get('layerPercent', 1.0)) / 100.0
         if layer_percent > 0:
@@ -28,6 +48,10 @@ class GridStrategy(BaseStrategy):
         # 高级设置
         self.ignore_trading_time = bool(config.get('ignoreTradingTime', False))
         self.enable_real_trade = bool(config.get('enableRealTrade', True))
+
+        # 缓存滑点配置
+        self.slippage_config['base_ratio'] = float(config.get('slippageRatio', 0)) / 100.0
+        self.slippage_config['mode'] = int(config.get('slippageMode', 1))
 
         # 任务有效期
         self.expiration_time = None
@@ -47,27 +71,18 @@ class GridStrategy(BaseStrategy):
         mode_str = "实盘交易" if self.enable_real_trade else "模拟演示 (仅日志)"
         self.log(f"任务({id})：当前运行模式: {mode_str}")
         
-        # 1. 解析配置
-        config = self.data.get('task', {}).get('config', {})
-        if isinstance(config, str):
-            try: config = json.loads(config)
-            except: pass
-        
-        stock_info = self.data.get('task', {}).get('stock', {})
-        if isinstance(stock_info, str):
-            try: stock_info = json.loads(stock_info)
-            except: pass
-        
-        if not isinstance(stock_info, dict):
-            stock_info = {}
-                
-        ts_code = stock_info.get('ts_code', '')
-        if not ts_code:
-            self.log(f"任务({id})：未找到股票代码", "ERROR")
+        # 1. 使用已解析的配置和股票信息
+        config = self.config
+        symbol_code, ts_code = self.stock_info.get('symbol', ''), self.stock_info.get('ts_code', '')
+
+        if not all([symbol_code, ts_code]):
+            self.log(f"任务({id})：未找到标的代码", "ERROR")
             return
 
-        stock_code = ''.join(filter(str.isdigit, ts_code))
-        
+        if not self.trader:
+            self.log(f"任务({id})：交易模块未就绪", "ERROR")
+            return
+
         # 2. 数据源初始化
         if not getattr(self.trader, 'tushare', None) and not getattr(self.trader, 'akshare', None):
             self.trader.init_data_source('easyquotation', 'sina')
@@ -122,6 +137,10 @@ class GridStrategy(BaseStrategy):
         max_repeat_times = int(config.get('maxRepeatTimes', 0))
         min_price_gap = float(config.get('minPriceGap', 0.1)) / 100.0
         min_trade_interval = int(config.get('minTradeInterval', 5))
+        
+        # 滑点参数
+        slippage_ratio = float(config.get('slippageRatio', 0)) / 100.0
+        slippage_mode = int(config.get('slippageMode', 1))  # 1:固定 2:动态
         
         # 交易模式：全区间 vs 分治
         # deploymentMode: FULL_RANGE(默认) - 全区间策略，任意位置均可买卖
@@ -259,15 +278,15 @@ class GridStrategy(BaseStrategy):
                 if trade_direction not in [0, 2]:
                     self.log(f"任务({id})启动需卖出但方向限制，跳过")
                 else:
-                    pos = self.trader.get_position(stock_code)
+                    pos = self.trader.get_position(symbol_code)
                     available = pos.get('available_quantity', 0)
                     self.log(f"任务({id})启动补卖: {available} {align_vol} (索引 {last_layer_index})")
 
                     if available >= align_vol:
-                        res = self._safe_sell(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补卖")
-                        if res:
-                            self._save_trade_record("sell", current_price, align_vol, f"Auto Align {last_layer_index}")
-                            self._update_task_position(stock_code)
+                        trade_result = self._safe_sell(symbol_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补卖")
+                        if trade_result['success']:
+                            self._save_trade_record("sell", trade_result['actual_price'], align_vol, f"Auto Align {last_layer_index}")
+                            self._update_task_position(symbol_code)
                     else:
                         self.log(f"任务({id})启动补卖失败：持仓不足(需{align_vol}, 有{available})，可能是T+1限制导致无法卖出。", "WARNING")
 
@@ -284,16 +303,16 @@ class GridStrategy(BaseStrategy):
                     need_cash = align_vol * current_price
                     
                     if not self.enable_real_trade or available_balance >= need_cash:
-                        res = self._safe_buy(stock_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补买")
-                        if res:
-                            self._save_trade_record("buy", current_price, align_vol, f"Auto Align {last_layer_index}")
-                            self._update_task_position(stock_code)
+                        trade_result = self._safe_buy(symbol_code, current_price, align_vol, reason=f"任务: {name}({id})\n原因: 启动自动补买")
+                        if trade_result['success']:
+                            self._save_trade_record("buy", trade_result['actual_price'], align_vol, f"Auto Align {last_layer_index}")
+                            self._update_task_position(symbol_code)
                     else:
                         self.log(f"任务({id})启动补买失败：资金不足(需{need_cash}, 有{available_balance})", "WARNING")
         
         # 5.1 自动建仓逻辑
         if auto_open_position:
-            pos = self.trader.get_position(stock_code)
+            pos = self.trader.get_position(symbol_code)
             current_hold = pos.get('total_quantity', 0)
             if current_hold == 0:
                 open_vol = 0
@@ -329,11 +348,11 @@ class GridStrategy(BaseStrategy):
                     
                     if not self.enable_real_trade or available_balance >= need_cash:
                         reason = f"任务: {name}({id})\n原因: 自动建仓"
-                        res = self._safe_buy(stock_code, current_price, open_vol, reason=reason)
-                        if res:
-                            self.log(f"任务({id})自动建仓委托已发送：{res}")
-                            self._save_trade_record("buy", current_price, open_vol, "Auto Open")
-                            self._update_task_position(stock_code)
+                        trade_result = self._safe_buy(symbol_code, current_price, open_vol, reason=reason)
+                        if trade_result['success']:
+                            self.log(f"任务({id})自动建仓委托已发送：{trade_result['result']}")
+                            self._save_trade_record("buy", trade_result['actual_price'], open_vol, "Auto Open")
+                            self._update_task_position(symbol_code)
                             # 重新获取持仓以确保状态同步
                             time.sleep(1)
                         else:
@@ -345,7 +364,7 @@ class GridStrategy(BaseStrategy):
         self.session = httpx.Client()
 
         # 初始更新持仓
-        self._update_task_position(stock_code)
+        self._update_task_position(symbol_code)
 
         is_paused = False
         last_trading_date = None
@@ -465,7 +484,7 @@ class GridStrategy(BaseStrategy):
 
                 if trigger_tp:
                     self.log(f"任务({id})触发止盈，价格：{current_price}！正在退出...", "WARNING")
-                    self._stop_profit_sell(stock_code, current_price)
+                    self._stop_profit_sell(symbol_code, current_price)
                     break
                 
                 # 止损检查
@@ -483,7 +502,7 @@ class GridStrategy(BaseStrategy):
 
                 if trigger_sl:
                     self.log(f"任务({id})触发止损，价格：{current_price}！正在退出...", "WARNING")
-                    self._stop_loss_sell(stock_code, current_price)
+                    self._stop_loss_sell(symbol_code, current_price)
                     break
 
                 # 8. 交易逻辑
@@ -646,23 +665,23 @@ class GridStrategy(BaseStrategy):
                         self.log(f"任务({id})上涨：{current_price} (层级 {last_layer_index} -> {curr_index}) -> 卖出 {trade_vol}")
                         
                         # 检查持仓
-                        pos = self.trader.get_position(stock_code)
+                        pos = self.trader.get_position(symbol_code)
                         available = pos.get('available_quantity', 0)
                         # 调试信息：打印持仓详情
                         self.log(f"任务({id})持仓详情: {pos}", "DEBUG")
                         
                         if available >= trade_vol:
                             reason = f"任务: {name}({id})\n原因: 上涨触发"
-                            res = self._safe_sell(stock_code, current_price, trade_vol, reason=reason)
-                            if res:
-                                self.log(f"任务({id})卖出委托已发送：{res}")
-                                self._save_trade_record("sell", current_price, trade_vol, f"Grid Sell {curr_index}")
-                                self._update_task_position(stock_code)
+                            trade_result = self._safe_sell(symbol_code, current_price, trade_vol, reason=reason)
+                            if trade_result['success']:
+                                self.log(f"任务({id})卖出委托已发送：{trade_result['result']}")
+                                self._save_trade_record("sell", trade_result['actual_price'], trade_vol, f"Grid Sell {curr_index}")
+                                self._update_task_position(symbol_code)
                                 update_trade_state(current_price, curr_index)
                                 if sell_triggered_by_fallback  :
                                     waiting_for_fallback = False
                                     peak_price = 0
-                            elif not res:
+                            elif not trade_result['success']:
                                 pass
                         else:
                             self.log(f"任务({id})可卖持仓不足。需 {trade_vol}，有 {available}，可能是T+1限制导致无法卖出。", "WARNING")
@@ -707,7 +726,7 @@ class GridStrategy(BaseStrategy):
                         self.log(f"任务({id})下跌：{current_price} (层级 {last_layer_index} -> {curr_index}) -> 买入 {trade_vol}")
                         
                         # 持仓检查 (Max Hold)
-                        pos = self.trader.get_position(stock_code)
+                        pos = self.trader.get_position(symbol_code)
                         total_pos = pos.get('total_quantity', 0)
                         
                         allow_buy = True
@@ -774,11 +793,11 @@ class GridStrategy(BaseStrategy):
                                     waiting_for_rebound = False
                                     valley_price = 0
                             else:
-                                res = self._safe_buy(stock_code, current_price, trade_vol, reason=reason)
-                                if res:
-                                    self.log(f"任务({id})买入委托已发送：{res}")
-                                    self._save_trade_record("buy", current_price, trade_vol, f"Grid Buy {curr_index}")
-                                    self._update_task_position(stock_code)
+                                trade_result = self._safe_buy(symbol_code, current_price, trade_vol, reason=reason)
+                                if trade_result['success']:
+                                    self.log(f"任务({id})买入委托已发送：{trade_result['result']}")
+                                    self._save_trade_record("buy", trade_result['actual_price'], trade_vol, f"Grid Buy {curr_index}")
+                                    self._update_task_position(symbol_code)
                                     update_trade_state(current_price, curr_index)
                                     if buy_triggered_by_rebound:
                                         waiting_for_rebound = False
@@ -816,6 +835,65 @@ class GridStrategy(BaseStrategy):
             
         else: # self.zeroLayerMode == 3: # 标准单边(Base~Base+P)
             return int(math.floor(raw_float))
+
+    def _calculate_dynamic_slippage(self, symbol_code, base_slippage):
+        """
+        计算动态滑点（基于波动率）
+        base_slippage: 基础滑点比例
+        返回: 调整后的滑点比例
+        """
+        try:
+            # 获取最近的价格数据计算波动率
+            quote = self.trader.get_stock_quote(symbol_code)
+            
+            # 使用日内振幅作为波动率指标
+            high = quote.get('high', 0)
+            low = quote.get('low', 0)
+            current = quote.get('price', 0)
+            
+            # 数据有效性检查
+            if high <= 0 or low <= 0 or current <= 0:
+                self.log(f"动态滑点计算：行情数据无效，使用基础滑点", "DEBUG")
+                return base_slippage
+            
+            # 无波动情况
+            if high == low:
+                self.log(f"动态滑点计算：无价格波动，使用基础滑点", "DEBUG")
+                return base_slippage
+            
+            # 计算日内振幅比例
+            amplitude = (high - low) / current
+            
+            # 振幅过大时使用保守滑点
+            if amplitude > 0.1:  # 振幅超过10%
+                self.log(f"动态滑点：振幅过大({amplitude*100:.1f}%)，使用最大滑点", "WARNING")
+                adjusted_slippage = base_slippage * 2.5
+                return min(adjusted_slippage, self.slippage_config['max_limit'])
+            
+            # 动态调整：振幅越大，滑点越大（更保守的倍数）
+            # 振幅 < 2%: 使用基础滑点
+            # 振幅 2-5%: 滑点 × 1.2
+            # 振幅 5-8%: 滑点 × 1.5
+            # 振幅 > 8%: 滑点 × 2.0
+            if amplitude < 0.02:
+                multiplier = 1.0
+            elif amplitude < 0.05:
+                multiplier = 1.2
+            elif amplitude < 0.08:
+                multiplier = 1.5
+            else:
+                multiplier = 2.0
+            
+            adjusted_slippage = base_slippage * multiplier
+            
+            # 限制最大滑点（从配置读取）
+            return min(adjusted_slippage, self.slippage_config['max_limit'])
+            
+        except Exception as e:
+            self.log(f"计算动态滑点失败: {e}，使用基础滑点", "DEBUG")
+        
+        return base_slippage
+
 
     def _calculate_price_range(self, base_price, config):
         """
@@ -866,45 +944,115 @@ class GridStrategy(BaseStrategy):
             
         return lower_price, upper_price
 
-    def _stop_profit_sell(self, stock_code, price):
-        pos = self.trader.get_position(stock_code)
+    def _stop_profit_sell(self, symbol_code, price):
+        pos = self.trader.get_position(symbol_code)
         avail = pos.get('available_quantity', 0)
         if avail > 0:
             name = self.data.get('name', 'Unknown')
             reason = f"任务: {name}({self.data.get('id')})\n原因: 触发止盈"
-            res = self._safe_sell(stock_code, price, avail, reason=reason)
-            if res:
-                self._save_trade_record("sell", price, avail, "Stop Profit")
+            trade_result = self._safe_sell(symbol_code, price, avail, reason=reason)
+            if trade_result['success']:
+                self._save_trade_record("sell", trade_result['actual_price'], avail, "Stop Profit")
         else:
             self.log(f"任务({self.data.get('id')})触发止盈，但可用持仓不足(可能是T+1限制)，无法执行卖出。", "WARNING")
 
-    def _stop_loss_sell(self, stock_code, price):
-        pos = self.trader.get_position(stock_code)
+    def _stop_loss_sell(self, symbol_code, price):
+        pos = self.trader.get_position(symbol_code)
         avail = pos.get('available_quantity', 0)
         if avail > 0:
             name = self.data.get('name', 'Unknown')
             reason = f"任务: {name}({self.data.get('id')})\n原因: 触发止损"
-            res = self._safe_sell(stock_code, price, avail, reason=reason)
-            if res:
-                self._save_trade_record("sell", price, avail, "Stop Loss")
+            trade_result = self._safe_sell(symbol_code, price, avail, reason=reason)
+            if trade_result['success']:
+                self._save_trade_record("sell", trade_result['actual_price'], avail, "Stop Loss")
         else:
             self.log(f"任务({self.data.get('id')})触发止损，但可用持仓不足(可能是T+1限制)，无法执行卖出。", "WARNING")
 
-    def _safe_buy(self, stock_code, price, quantity, reason):
+    def _safe_buy(self, symbol_code, price, quantity, reason):
+        """
+        安全买入函数，自动应用滑点
+        price: 触发价格
+        返回: {"success": bool, "actual_price": float, "result": dict}
+        """
+        # 使用缓存的滑点配置
+        base_slippage_ratio = self.slippage_config['base_ratio']
+        slippage_mode = self.slippage_config['mode']
+        
+        # 计算实际滑点
+        if base_slippage_ratio > 0:
+            if slippage_mode == 2:  # 动态模式
+                slippage_ratio = self._calculate_dynamic_slippage(symbol_code, base_slippage_ratio)
+            else:  # 固定模式
+                slippage_ratio = base_slippage_ratio
+        else:
+            slippage_ratio = 0
+        
+        # 应用滑点：买入时价格上浮
+        actual_price = price * (1 + slippage_ratio) if slippage_ratio > 0 else price
+        
+        # 滑点过高警告
+        if slippage_ratio > 0.05:  # 滑点超过5%
+            self.log(f"警告：滑点比例过高({slippage_ratio*100:.2f}%)，可能影响成交", "WARNING")
+        
         if not self.enable_real_trade:
-            self.log(f"【模拟交易】触发买入：{stock_code}, 价格 {price}, 数量 {quantity}\n原因: {reason}", "WARNING")
-            return {"id": "sim_buy", "status": "simulated"}
-        return self.trader.buy(stock_code, price, quantity, reason=reason)
+            if slippage_ratio > 0:
+                mode_str = "动态" if slippage_mode == 2 else "固定"
+                self.log(f"【模拟交易】触发买入：{symbol_code}, 触发价 {price:.3f}, 实际价 {actual_price:.3f} (滑点 {slippage_ratio*100:.2f}% {mode_str}), 数量 {quantity}\n原因: {reason}", "WARNING")
+            else:
+                self.log(f"【模拟交易】触发买入：{symbol_code}, 价格 {price:.3f}, 数量 {quantity}\n原因: {reason}", "WARNING")
+            return {"success": True, "actual_price": actual_price, "result": {"id": "sim_buy", "status": "simulated"}}
+        
+        result = self.trader.buy(symbol_code, actual_price, quantity, reason=reason)
+        if result and slippage_ratio > 0:
+            mode_str = "动态" if slippage_mode == 2 else "固定"
+            self.log(f"买入委托已发送（含滑点 {slippage_ratio*100:.2f}% {mode_str}）：触发价 {price:.3f} -> 实际价 {actual_price:.3f}", "INFO")
+        
+        return {"success": bool(result), "actual_price": actual_price, "result": result}
 
-    def _safe_sell(self, stock_code, price, quantity, reason):
+    def _safe_sell(self, symbol_code, price, quantity, reason):
+        """
+        安全卖出函数，自动应用滑点
+        price: 触发价格
+        返回: {"success": bool, "actual_price": float, "result": dict}
+        """
+        # 使用缓存的滑点配置
+        base_slippage_ratio = self.slippage_config['base_ratio']
+        slippage_mode = self.slippage_config['mode']
+        
+        # 计算实际滑点
+        if base_slippage_ratio > 0:
+            if slippage_mode == 2:  # 动态模式
+                slippage_ratio = self._calculate_dynamic_slippage(symbol_code, base_slippage_ratio)
+            else:  # 固定模式
+                slippage_ratio = base_slippage_ratio
+        else:
+            slippage_ratio = 0
+        
+        # 应用滑点：卖出时价格下浮
+        actual_price = price * (1 - slippage_ratio) if slippage_ratio > 0 else price
+        
+        # 滑点过高警告
+        if slippage_ratio > 0.05:  # 滑点超过5%
+            self.log(f"警告：滑点比例过高({slippage_ratio*100:.2f}%)，可能影响成交", "WARNING")
+        
         if not self.enable_real_trade:
-            self.log(f"【模拟交易】触发卖出：{stock_code}, 价格 {price}, 数量 {quantity}\n原因: {reason}", "WARNING")
-            return {"id": "sim_sell", "status": "simulated"}
-        return self.trader.sell(stock_code, price, quantity, reason=reason)
+            if slippage_ratio > 0:
+                mode_str = "动态" if slippage_mode == 2 else "固定"
+                self.log(f"【模拟交易】触发卖出：{symbol_code}, 触发价 {price:.3f}, 实际价 {actual_price:.3f} (滑点 {slippage_ratio*100:.2f}% {mode_str}), 数量 {quantity}\n原因: {reason}", "WARNING")
+            else:
+                self.log(f"【模拟交易】触发卖出：{symbol_code}, 价格 {price:.3f}, 数量 {quantity}\n原因: {reason}", "WARNING")
+            return {"success": True, "actual_price": actual_price, "result": {"id": "sim_sell", "status": "simulated"}}
+        
+        result = self.trader.sell(symbol_code, actual_price, quantity, reason=reason)
+        if result and slippage_ratio > 0:
+            mode_str = "动态" if slippage_mode == 2 else "固定"
+            self.log(f"卖出委托已发送（含滑点 {slippage_ratio*100:.2f}% {mode_str}）：触发价 {price:.3f} -> 实际价 {actual_price:.3f}", "INFO")
+        
+        return {"success": bool(result), "actual_price": actual_price, "result": result}
 
-    def _update_task_position(self, stock_code):
+    def _update_task_position(self, symbol_code):
         try:
-            position = self.trader.get_position(stock_code)
+            position = self.trader.get_position(symbol_code)
             
             data = {
                 "id": self.data.get('id'),
@@ -954,23 +1102,14 @@ class GridStrategy(BaseStrategy):
             backend_url = backend_url[:-1]
             
         url = f"{backend_url}/quant/tradeRecord/createTradeRecord"
-        
-        stock_info = self.data.get('task', {}).get('stock', {})
-        if isinstance(stock_info, str):
-            try: stock_info = json.loads(stock_info)
-            except: pass
-        
-        if not isinstance(stock_info, dict):
-            stock_info = {}
-
         account = self.data.get('account', {})
 
         data = {
             "member_id": account.get('member_id'),
             "account_id": account.get('id'),
             "task_id": self.data.get('id'),
-            "symbol": stock_info.get('ts_code', ''),
-            "name": stock_info.get('name', ''),
+            "name": self.stock_info.get('name', ''),
+            "symbol": self.stock_info.get('ts_code', ''),
             "price": float(price),
             "quantity": float(quantity),
             "amount": float(price) * float(quantity),
